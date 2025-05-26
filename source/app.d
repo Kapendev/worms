@@ -9,6 +9,7 @@ import parin;
 
 Game* game;
 TextureId atlas;
+SoundId bgm;
 SoundId walkSound;
 SoundId doorSound;
 SoundId goodSound;
@@ -27,7 +28,7 @@ enum commonFallAnimation = SpriteAnimation(0, 4, 8, false);
 enum commonSleepAnimtion = SpriteAnimation(1, 1, 0, false);
 
 enum buttonsTargetInput = "13223";
-enum wormsTargetCount = 19;
+enum wormsTargetCount = 41;
 enum bloodTargetCount = 1;
 enum defaultDoorHp = 5;
 enum defaultTextHp = "-----";
@@ -62,7 +63,11 @@ struct Player {
         // Update state.
         if (canMove) {
             hasAction = false;
-            if (!wasd.isZero) isSleeping = false;
+            if (!wasd.isZero) {
+                auto before = isSleeping;
+                isSleeping = false;
+                if (before != isSleeping) playSound(bgm);
+            }
             if (flashTimer.hasStopped) flashState = !flashState;
             if (!hitDelayTimer.isRunning) {
                 flashState = false;
@@ -144,14 +149,20 @@ struct WormsCounterArea {
     void update(float dt) {
         count = 0;
         foreach (worm; game.worms) count += id.hasCollision(worm.id);
+        if (id.hasCollision(game.player.id)) count += 1;
     }
 
     void draw() {
+        auto o = DrawOptions();
+        o.color = Pico8.lightGray;
+        if (game.wormsDone) o.color = Pico8.purple;
+
         enum offset = Vec2(4, 4);
-        auto target = Rect(offset.x + 31 + 5, offset.y + 25 + 3);
+        auto target = Rect(offset.x + 48, offset.y + 25 + 3);
         target.position = getActor(id).position.toVec() - offset;
-        drawTexturePatch(atlas, Rect(64, 0, 24, 24), target, false);
-        if (count) drawText(font, "{}".fmt(count), target.position + Vec2(6, 4), DrawOptions(Pico8.lightGray));
+        drawTexturePatch(atlas, Rect(64, 0, 24, 24), target, false, o);
+        o.hook = Hook.topRight;
+        drawText(font, "[{}]".fmt(game.wormsDone ? wormsTargetCount : count), getActor(id).bottomRightPoint.toVec() + Vec2(2, 0), o);
     }
 }
 
@@ -345,7 +356,7 @@ struct Worm {
 }
 
 struct NumberInput {
-    char[N] data;
+    char[N] data = "22222222";
     int appendIndex;
 
     enum N = 8;
@@ -461,6 +472,7 @@ void prepareGame() {
     walkSound = loadSound("audio/walk.wav", 2.51f, 0.38f, true, 1.18f);
     doorSound = loadSound("audio/door.wav", 0.44f, 1.00f, false, 1.18f);
     goodSound = loadSound("audio/good.wav", 0.92f, 1.00f, false, 1.18f);
+    bgm = loadSound("audio/snowfall_looped.ogg", 0.92f, 0.48f, true);
     atlas = loadTexture("atlas.png");
 
     if (game == null) {
@@ -489,6 +501,7 @@ void prepareGame() {
         game.worms = tempWorms;
         game.buttons = tempButtons;
     }
+    stopSound(bgm);
     game.map.parse(loadTempText("map.csv").getOr(), 8, 8);
     game.world.parseWalls(loadTempText("map_walls.csv").getOr(), 8, 8);
 
@@ -503,16 +516,16 @@ void prepareGame() {
     game.paintings.append(Painting(1, game.world.appendActor(IRect(10, 20))));
     game.paintings.append(Painting(0, game.world.appendActor(IRect(10, 20))));
 
-    game.player.id = game.world.appendActor(IRect(114, 49, 4, 2));
+    game.player.id = game.world.appendActor(IRect(114, 60, 4, 2));
     game.hole.id = game.world.appendActor(IRect(73, 42, 13, 13));
-    game.ball.id = game.world.appendActor(IRect(35, 30, 4, 4));
-    game.wormsCounterArea.id = game.world.appendActor(IRect(100, 36, 31, 25));
-    game.bloodCounterArea1.id = game.world.appendActor(IRect(21, 32, 8, 8));
-    game.bloodCounterArea2.id = game.world.appendActor(IRect(21, 46, 8, 8));
+    game.ball.id = game.world.appendActor(IRect(30, 52, 4, 4));
+    game.wormsCounterArea.id = game.world.appendActor(IRect(100, 25, 43, 25));
+    game.bloodCounterArea1.id = game.world.appendActor(IRect(21, 28, 8, 8));
+    game.bloodCounterArea2.id = game.world.appendActor(IRect(21, 42, 8, 8));
     game.door.id = game.world.appendActor(IRect(111, 24, 10, 4));
 
-    enum buttonCenter = IVec2(8 * 9 + 4, 67);
-    enum buttonOffset = IVec2(25, 0);
+    enum buttonCenter = IVec2(8 * 9 + 1, 69);
+    enum buttonOffset = IVec2(21, 0);
     appendButton(buttonCenter - buttonOffset);
     appendButton(buttonCenter);
     appendButton(buttonCenter + buttonOffset);
@@ -603,7 +616,9 @@ bool update(float dt) {
                 game.fadingArea.y = gameHeight;
                 game.fadingTarget.y = -gameHeight * 1.5f;
             }
-            if (game.fadingArea.y <= 0) game.mode = play;
+            if (game.fadingArea.y <= 0) {
+                game.mode = play;
+            }
             break;
         case play:
             auto isFading = !game.fadingArea.y.fequals(game.fadingTarget.y, 30); // I don't care. Smoothstep is better, I know... Nerd.
@@ -693,6 +708,12 @@ bool update(float dt) {
                 if (game.isEnding && game.fadingArea.y <= 0) {
                 } else {
                     drawTextureArea(atlas, Rect(32, 0, 8, 8), Vec2(21, 13));
+                    auto buttonsHelperOptions = DrawOptions(game.buttonsDone ? Pico8.purple : Pico8.lightGray);
+                    drawTextureArea(atlas, Rect(0, 48 + 8 * 0, 8, 8), Vec2(8 * 3, 8 * 9), buttonsHelperOptions);
+                    drawTextureArea(atlas, Rect(0, 48 + 8 * 2, 8, 8), Vec2(8 * 4, 8 * 9), buttonsHelperOptions);
+                    drawTextureArea(atlas, Rect(0, 48 + 8 * 1, 8, 8), Vec2(8 * 14, 8 * 9), buttonsHelperOptions);
+                    drawTextureArea(atlas, Rect(0, 48 + 8 * 1, 8, 8), Vec2(8 * 15, 8 * 9), buttonsHelperOptions);
+                    drawTextureArea(atlas, Rect(0, 48 + 8 * 2, 8, 8), Vec2(8 * 16, 8 * 9), buttonsHelperOptions);
                     foreach (i, painting; game.paintings) {
                         drawTextureArea(atlas, Rect(40 + 16 * i, 24, 16, 16), painting.position);
                     }
