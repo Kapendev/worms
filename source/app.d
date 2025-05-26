@@ -26,11 +26,11 @@ enum commonWalkAnimation = SpriteAnimation(0, 2, 10, true);
 enum commonFallAnimation = SpriteAnimation(0, 4, 8, false);
 enum commonSleepAnimtion = SpriteAnimation(1, 1, 0, false);
 
-enum buttonsTargetInput = "1323";
+enum buttonsTargetInput = "13223";
 enum wormsTargetCount = 19;
 enum bloodTargetCount = 1;
 enum defaultDoorHp = 5;
-enum defaultTextHp = "------";
+enum defaultTextHp = "-----";
 
 struct Player {
     int hp = defaultTextHp.length;
@@ -151,6 +151,7 @@ struct WormsCounterArea {
         auto target = Rect(offset.x + 31 + 5, offset.y + 25 + 3);
         target.position = getActor(id).position.toVec() - offset;
         drawTexturePatch(atlas, Rect(64, 0, 24, 24), target, false);
+        if (count) drawText(font, "{}".fmt(count), target.position + Vec2(6, 4), DrawOptions(Pico8.lightGray));
     }
 }
 
@@ -212,10 +213,9 @@ struct Ball {
 struct Door {
     int hp = defaultDoorHp;
     BoxActorId id;
-    BoxActorId openButtonId;
 
     void update(float dt, bool hackBool = false) {
-        if (id.hasCollision(game.player.id) || openButtonId.hasCollision(game.player.id)) {
+        if (id.hasCollision(game.player.id)) {
            game.player.hasAction = true;
             if (!isActionPressed || game.player.hp == 0) return;
             stopSound(doorSound);
@@ -225,20 +225,17 @@ struct Door {
                 game.fadingArea.y = gameHeight;
                 game.fadingTarget.y = -gameHeight * 1.5f;
 //                game.world.clearWalls(); TODO
-            } else if (openButtonId.hasCollision(game.player.id)) {
-                if (!hackBool) moveWorms(getActor(openButtonId).bottomPoint.toVec());
-                if (hp == 1) {
-                    auto hasOrderAndNotChaos = true;
-                    foreach (i; 0 .. 4) if (game.paintings[i].index != i) hasOrderAndNotChaos = false;
-                    if (hasOrderAndNotChaos) {
-                        hp = 0;
-                        playSound(goodSound);
-                    }
-                }
-            } else {
-                if (!hackBool) moveWorms(getActor(id).bottomPoint.toVec());
             }
+            moveWorms(getActor(id).bottomPoint.toVec());
             if (!game.isEnding) if (!hackBool) appendWorm();
+        }
+        if (hp == 1) {
+            auto hasOrderAndNotChaos = true;
+            foreach (i; 0 .. 4) if (game.paintings[i].index != i) hasOrderAndNotChaos = false;
+            if (hasOrderAndNotChaos) {
+                hp = 0;
+                playSound(goodSound);
+            }
         }
     }
 
@@ -352,7 +349,7 @@ struct NumberInput {
     int appendIndex;
 
     enum N = 8;
-    enum inputLenght = 4;
+    enum inputLenght = buttonsTargetInput.length;
 
     void append(char value) {
         data[appendIndex] = value;
@@ -513,7 +510,6 @@ void prepareGame() {
     game.bloodCounterArea1.id = game.world.appendActor(IRect(21, 32, 8, 8));
     game.bloodCounterArea2.id = game.world.appendActor(IRect(21, 46, 8, 8));
     game.door.id = game.world.appendActor(IRect(111, 24, 10, 4));
-    game.door.openButtonId = game.world.appendActor(IRect(133, 14, 5, 14));
 
     enum buttonCenter = IVec2(8 * 9 + 4, 67);
     enum buttonOffset = IVec2(25, 0);
@@ -697,7 +693,6 @@ bool update(float dt) {
                 if (game.isEnding && game.fadingArea.y <= 0) {
                 } else {
                     drawTextureArea(atlas, Rect(32, 0, 8, 8), Vec2(21, 13));
-                    drawTextureArea(atlas, Rect(40, 0, 8, 8), Vec2(132, 13));
                     foreach (i, painting; game.paintings) {
                         drawTextureArea(atlas, Rect(40 + 16 * i, 24, 16, 16), painting.position);
                     }
@@ -726,7 +721,10 @@ bool update(float dt) {
                 drawRect(Rect(-2, 84, 168, 22), Pico8.black);
                 drawRect(Rect(-7, -5, 11, 92), Pico8.black);
                 drawRect(Rect(157, -7, 11, 92), Pico8.black);
-                if (game.hasPlayerLeft) drawTextureArea(atlas, Rect(88, 88, 40, 24), Vec2(64, 32));
+                if (game.hasPlayerLeft) {
+                    drawTextureArea(atlas, Rect(88, 88, 40, 24), Vec2(64, 32));
+                    drawTextureArea(atlas, Rect(48, 88, 40, 16), Vec2(64, 32 + 24));
+                }
             }
             break;
         case outro:
