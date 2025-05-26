@@ -1,0 +1,15 @@
+.dub
+game
+lib*
+test*
+*.wasm
+*.so
+*.dylib
+*.dll
+*.a
+*.lib
+*.exe
+*.pdb
+*.o
+*.obj
+*.lst

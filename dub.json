@@ -1,0 +1,52 @@
+{
+    "name" : "game",
+    "description" : "A game made with Parin.",
+    "authors" : ["Name"],
+    "copyright" : "Copyright © 2024, Name",
+    "license" : "proprietary",
+	"stringImportPaths": [
+		"source"
+	],
+    "configurations": [
+        {
+            "name": "linux",
+            "targetType": "executable",
+            "platforms": ["linux"],
+            "lflags": ["-L.", "-rpath=$$ORIGIN"],
+            "dflags": ["-betterC", "-i"],
+            "libs": [
+                "raylib",
+                "GL",
+                "m",
+                "pthread",
+                "dl",
+                "rt",
+                "X11"
+            ]
+        },
+        {
+            "name": "windows",
+            "targetType": "executable",
+            "platforms": ["windows"],
+            "dflags": ["-betterC", "-i"],
+            "libs": [
+                "raylib"
+            ]
+        },
+        {
+            "name": "osx",
+            "targetType": "executable",
+            "platforms": ["osx"],
+            "lflags": ["-L.", "-rpath", "@executable_path/"],
+            "libs": [
+                "raylib"
+            ]
+        },
+        {
+            "name": "web",
+            "targetType": "staticLibrary",
+            "targetName": "webgame",
+            "dflags": ["-mtriple=wasm32-unknown-unknown-wasm", "-checkaction=halt", "-betterC", "-i", "--release"]
+        }
+    ]
+}
