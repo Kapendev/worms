@@ -1,83 +1,130 @@
 // ---
-// Copyright 2024 Alexandros F. G. Kapretsos
+// Copyright 2025 Alexandros F. G. Kapretsos
 // SPDX-License-Identifier: MIT
 // Email: alexandroskapretsos@gmail.com
 // Project: https://github.com/Kapendev/parin
-// Version: v0.0.44
 // ---
 
-// TODO: Update all the doc comments here.
-
-/// The `timer` module provides a simple and extensible timer.
+/// The `timer` module provides a simple timer.
 module parin.timer;
 
-import joka.math;
+import parin.engine;
 
-@safe @nogc nothrow:
+@safe nothrow @nogc:
 
+/// A timer with pause/resume and repeat support.
 struct Timer {
-    float time = 1.0f;
-    float duration = 1.0f;
-    float prevTime = 1.0f;
-    bool isPaused;
-    bool canRepeat;
+    float duration = 1.0f;                  /// The duration of the timer, in seconds.
+    float pauseTime = 0.0f;                 /// The elapsed time when the timer was paused.
+    float startTime = 0.0f;                 /// The elapsed time when the timer was started.
+    float stopTimeElapsedTimeBuffer = 0.0f; /// Buffer storing the elapsed time after stopping.
+    bool canRepeat;                         /// Whether the timer restarts automatically after completion.
 
-    @safe @nogc nothrow:
+    @safe nothrow @nogc:
 
+    deprecated("Will be replaced with pauseTime.")
+    alias pausedTime = pauseTime;
+
+    /// Initializes the timer with the specified duration and repeat behavior.
     this(float duration, bool canRepeat = false) {
-        this.time = duration;
         this.duration = duration;
-        this.prevTime = duration;
         this.canRepeat = canRepeat;
     }
 
-    bool isRunning() {
-        return !isPaused && time != duration && prevTime != duration;
+    /// Returns true if the timer is currently paused.
+    bool isPaused() {
+        time(); // We need to update the state before checking.
+        return pauseTime != 0.0f;
     }
 
-    bool hasFirstTime() {
-        return time == 0.0f;
+    /// Returns true if the timer is currently active (running).
+    bool isActive() {
+        time(); // We need to update the state before checking.
+        return startTime != 0.0f;
     }
 
-    bool hasLastTime() {
-        return time == duration;
-    }
-
+    /// Returns true if the timer has just started.
     bool hasStarted() {
-        return !isPaused && time != duration && prevTime != time && prevTime == 0.0f;
+        time(); // We need to update the state before checking.
+        return startTime.fequals(elapsedTime);
     }
 
+    /// Returns true if the timer has just stopped.
     bool hasStopped() {
-        return !isPaused && time == duration && prevTime != duration;
+        time(); // We need to update the state before checking.
+        return stopTimeElapsedTimeBuffer.fequals(elapsedTime);
     }
 
-    void start(float duration = -1.0f) {
-        if (duration >= 0.0f) this.duration = duration;
-        time = 0.0f;
-        prevTime = 0.0f;
+    /// Starts the timer with an optional new duration.
+    void start(float newDuration = -1.0f) {
+        if (newDuration >= 0.0f) duration = newDuration;
+        startTime = elapsedTime;
+        stopTimeElapsedTimeBuffer = 0.0f;
+        pauseTime = 0.0f;
     }
 
+    /// Stops the timer and records the time at which it stopped.
     void stop() {
-        time = duration;
-        prevTime = duration - 0.1f;
+        startTime = 0.0f;
+        stopTimeElapsedTimeBuffer = elapsedTime;
+        pauseTime = 0.0f;
     }
 
+    /// Toggles the active state of the timer.
+    void toggleIsActive() {
+        if (isActive) stop();
+        else start();
+    }
+
+    /// Pauses the time.
     void pause() {
-        isPaused = true;
+        pauseTime = time;
     }
 
+    /// Resumes the timer from the paused state.
     void resume() {
-        isPaused = false;
+        startTime = elapsedTime - pauseTime;
+        pauseTime = 0.0f;
     }
 
+    /// Toggles the paused state of the timer.
     void toggleIsPaused() {
-        isPaused = !isPaused;
+        if (isPaused) resume();
+        else pause();
     }
 
-    void update(float dt) {
-        if (isPaused || (time == duration && prevTime == duration)) return;
-        if (canRepeat && hasStopped) start();
-        prevTime = time;
-        time = min(time + dt, duration);
+    /// Returns the current time of the timer and handles stop/repeat logic.
+    float time() {
+        if (startTime == 0.0f) return 0.0f;
+        if (pauseTime != 0.0f) return pauseTime;
+        auto result = max(elapsedTime - startTime, 0.0f);
+        if (result >= duration) {
+            stop();
+            if (canRepeat) startTime = elapsedTime;
+        }
+        result = min(result, duration);
+        return result;
     }
+
+    /// Returns the remaining time of the timer and handles stop/repeat logic.
+    float timeLeft() {
+        return duration - time;
+    }
+
+    /// Sets the current time of the timer.
+    /// If the given value is non-zero, the timer becomes active.
+    void setTime(float newTime) {
+        startTime = max(elapsedTime - newTime, 0.0f);
+        if (isPaused) {
+            pauseTime = 0.0f;
+            pauseTime = time;
+        }
+    }
+
+    deprecated("Will be replaced with isActive.")
+    alias isRunning = isActive;
+    deprecated("Will be removed because it does nothing now.")
+    void update(float dt) {};
+    deprecated("Will be replaced with setTime.")
+    void time(float newTime) => setTime(newTime);
 }

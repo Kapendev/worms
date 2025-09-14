@@ -3,16 +3,15 @@
 // SPDX-License-Identifier: MIT
 // Email: alexandroskapretsos@gmail.com
 // Project: https://github.com/Kapendev/joka
-// Version: v0.0.24
 // ---
 
 module joka.stdc.stdio;
 
 import joka.stdc.config;
 
-@nogc nothrow extern(C):
+extern(C) nothrow @nogc:
 
-alias FILE = void;
+struct FILE;
 
 enum SEEK_SET = 0;
 enum SEEK_CUR = 1;
@@ -117,3 +116,9 @@ size_t fread(void* ptr, size_t size, size_t count, FILE* stream);
 int fclose(FILE* stream);
 int fputs(const(char)* str, FILE* stream);
 size_t fwrite(const(void)* buffer, size_t size, size_t count, FILE* stream);
+int ferror(FILE* stream);
+
+int printf(const(char)* format, ...);
+int fprintf(FILE* stream, const(char)* format, ...);
+int sprintf(char* buffer, const(char)* format, ...);
+int snprintf(char* buffer, size_t bufsz, const(char)* format, ...);

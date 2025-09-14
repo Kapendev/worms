@@ -46,9 +46,8 @@ struct Player {
     BoxActorId id;
     BoxMover mover = BoxMover(1.0f, 0.5f);
 
-    Sprite sprite = Sprite(8, 8, 0, 112);
+    Sprite sprite = Sprite(8, 8, 0, 112, Hook.bottom);
     Vec2 spriteScale = Vec2(1);
-    Flip spriteFlip = Flip.x;
     Hook spriteHook = Hook.bottom;
 
     void update(float dt) {
@@ -57,8 +56,6 @@ struct Player {
             stopSound(walkSound);
             return;
         }
-        hitDelayTimer.update(dt);
-        flashTimer.update(dt);
 
         // Update state.
         if (canMove) {
@@ -69,7 +66,7 @@ struct Player {
                 if (before != isSleeping) playSound(bgm);
             }
             if (flashTimer.hasStopped) flashState = !flashState;
-            if (!hitDelayTimer.isRunning) {
+            if (!hitDelayTimer.isActive) {
                 flashState = false;
                 flashTimer.stop();
             }
@@ -86,7 +83,7 @@ struct Player {
 
         // Update sprite.
         sprite.position = getActor(id).bottomPoint.toVec();
-        spriteFlip = wasd.x == 0 ? spriteFlip : (wasd.x < 0) ? Flip.x : Flip.none;
+        sprite.flip = wasd.x == 0 ? sprite.flip : (wasd.x < 0) ? Flip.x : Flip.none;
         if (0) {
         } else if (isSleeping) {
             sprite.play(commonSleepAnimtion);
@@ -107,10 +104,9 @@ struct Player {
     }
 
     void draw() {
-        auto o = DrawOptions(Hook.bottom);
-        o.flip = spriteFlip;
-        o.scale = spriteScale;
-        if (hitDelayTimer.isRunning) o.color = flashState ? blank : white;
+        auto o = DrawOptions(spriteScale);
+        o.hook = Hook.bottom;
+        if (hitDelayTimer.isActive) o.color = flashState ? blank : white;
         if (!isFalling) drawTextureArea(atlas, Rect(16, 104, 8, 8), sprite.position, o);
         drawSprite(atlas, sprite, o);
         if (canAction && hasAction) {
@@ -160,7 +156,7 @@ struct WormsCounterArea {
         enum offset = Vec2(4, 4);
         auto target = Rect(offset.x + 48, offset.y + 25 + 3);
         target.position = getActor(id).position.toVec() - offset;
-        drawTexturePatch(atlas, Rect(64, 0, 24, 24), target, false, o);
+        drawTextureSlice(atlas, Rect(64, 0, 24, 24), target, Margin(24 / 3), false, o);
         o.hook = Hook.topRight;
         drawText(font, "[{}]".fmt(game.wormsDone ? wormsTargetCount : count), getActor(id).bottomRightPoint.toVec() + Vec2(2, 0), o);
     }
@@ -298,9 +294,6 @@ struct Worm {
 
     void update(float dt) {
         if (!canMove) return;
-        flipTimer.update(dt);
-        huntTimer.update(dt);
-        directionTimer.update(dt);
 
         // Move around.
         mover.direction = Vec2();
@@ -331,7 +324,7 @@ struct Worm {
 
         // Check for collisions.
         if (id.hasCollision(game.player.id)) {
-            if (!game.player.hitDelayTimer.isRunning) {
+            if (!game.player.hitDelayTimer.isActive) {
                 if (game.player.hp >= 1) {
                     if (game.player.hp == 1) game.finTimer.start();
                     game.player.hp -= 1;
@@ -405,7 +398,7 @@ struct Painting {
         if (id.hasCollision(game.player.id)) {
             game.player.hasAction = true;
             if (isActionPressed) {
-                auto move = game.player.spriteFlip == Flip.x ? -1 : 1;
+                auto move = game.player.sprite.flip == Flip.x ? -1 : 1;
                 index = clamp(index + move, 0, 3);
             }
         }
@@ -433,7 +426,7 @@ struct Game {
     Timer            outroTimer = Timer(4.2f);
     Timer            finTimer = Timer(0.9f);
 
-    List!Painting    paintings;
+    FixedList!(Painting, 4) paintings;
     Player           player;
     Hole             hole;
     Door             door;
@@ -441,7 +434,7 @@ struct Game {
     Ball             ball;
     bool             ballDone;
 
-    List!Blood       blood;
+    FixedList!(Blood, 8)       blood;
     BloodCounterArea bloodCounterArea1;
     BloodCounterArea bloodCounterArea2;
     bool             bloodDone;
@@ -450,7 +443,7 @@ struct Game {
     WormsCounterArea wormsCounterArea;
     bool             wormsDone;
 
-    List!Button      buttons;
+    FixedList!(Button, 3)  buttons;
     NumberInput      buttonsInput;
     bool             buttonsDone;
 }
@@ -466,7 +459,7 @@ bool hasCollision(BoxActorId a, BoxActorId b) {
 
 void prepareGame() {
     lockResolution(gameWidth, gameHeight);
-    freeEngineResources();
+    freeManagedEngineResources();
     setBackgroundColor(Pico8.lightGray);
     setBorderColor(Pico8.lightGray);
     walkSound = loadSound("audio/walk.wav", 2.51f, 0.38f, true, 1.18f);
@@ -477,6 +470,12 @@ void prepareGame() {
 
     if (game == null) {
         game = jokaMake!Game();
+        game.world.reserve(512);
+        game.worms.reserve(512);
+        game.ignoreLeak();
+        game.world.ignoreLeak();
+        game.worms.ignoreLeak();
+        game.map.ignoreLeak();
     } else {
         // NOTE(Joka): Make the arena allocator easier to use for existing types?
         // Is an arena good for things like that? Don't know. I will review the code later.
@@ -502,8 +501,8 @@ void prepareGame() {
         game.buttons = tempButtons;
     }
     stopSound(bgm);
-    game.map.parse(loadTempText("map.csv").getOr(), 8, 8);
-    game.world.parseWalls(loadTempText("map_walls.csv").getOr(), 8, 8);
+    game.map.parseCsv(loadTempText("map.csv").getOr(), 8, 8);
+    game.world.parseWallsCsv(loadTempText("map_walls.csv").getOr(), 8, 8);
 
     // NOTE(Joka): Arrays of structs.
     // This could be an array, but D likes to create type info for `struct[N]` types and WASM doesn't like that.
@@ -511,18 +510,18 @@ void prepareGame() {
     // Anyway...
     // I am setting the painting order here too because why not.
     // It depends also on the atlas position a bit. It's weird, I know. Works tho.
-    game.paintings.append(Painting(2, game.world.appendActor(IRect(10, 20))));
-    game.paintings.append(Painting(3, game.world.appendActor(IRect(10, 20))));
-    game.paintings.append(Painting(1, game.world.appendActor(IRect(10, 20))));
-    game.paintings.append(Painting(0, game.world.appendActor(IRect(10, 20))));
+    game.paintings.push(Painting(2, game.world.pushActor(IRect(10, 20))));
+    game.paintings.push(Painting(3, game.world.pushActor(IRect(10, 20))));
+    game.paintings.push(Painting(1, game.world.pushActor(IRect(10, 20))));
+    game.paintings.push(Painting(0, game.world.pushActor(IRect(10, 20))));
 
-    game.player.id = game.world.appendActor(IRect(114, 60, 4, 2));
-    game.hole.id = game.world.appendActor(IRect(73, 42, 13, 13));
-    game.ball.id = game.world.appendActor(IRect(30, 52, 4, 4));
-    game.wormsCounterArea.id = game.world.appendActor(IRect(100, 25, 43, 25));
-    game.bloodCounterArea1.id = game.world.appendActor(IRect(21, 28, 8, 8));
-    game.bloodCounterArea2.id = game.world.appendActor(IRect(21, 42, 8, 8));
-    game.door.id = game.world.appendActor(IRect(111, 24, 10, 4));
+    game.player.id = game.world.pushActor(IRect(114, 60, 4, 2));
+    game.hole.id = game.world.pushActor(IRect(73, 42, 13, 13));
+    game.ball.id = game.world.pushActor(IRect(30, 52, 4, 4));
+    game.wormsCounterArea.id = game.world.pushActor(IRect(100, 25, 43, 25));
+    game.bloodCounterArea1.id = game.world.pushActor(IRect(21, 28, 8, 8));
+    game.bloodCounterArea2.id = game.world.pushActor(IRect(21, 42, 8, 8));
+    game.door.id = game.world.pushActor(IRect(111, 24, 10, 4));
 
     enum buttonCenter = IVec2(8 * 9 + 1, 69);
     enum buttonOffset = IVec2(21, 0);
@@ -554,17 +553,17 @@ void appendWorm() {
     worm.flipTimer.start();
     worm.directionTimer.start();
     worm.startHuntTimer();
-    worm.id = game.world.appendActor(IRect(77, 45, 4, 2));
+    worm.id = game.world.pushActor(IRect(77, 45, 4, 2));
     worm.animationOffset = cast(ubyte) (randi % 255);
     worm.animationSpeed = cast(ubyte) (2 + randi % 4);
-    game.worms.append(worm);
+    game.worms.push(worm);
 }
 
 void appendButton(IVec2 position) {
     auto button = Button();
-    button.id = game.world.appendActor(IRect(position, 8, 6));
+    button.id = game.world.pushActor(IRect(position, 8, 6));
     button.value = cast(int) game.buttons.length + 1;
-    game.buttons.append(button);
+    game.buttons.push(button);
 }
 
 void appendBlood(IVec2 position) {
@@ -573,11 +572,11 @@ void appendBlood(IVec2 position) {
     // TODO(Parin): Hack that resolves collision with bottom walls. Make library solution that does this when adding a new box.
     if (box.y >= 77) {
         foreach (wall; game.world.walls) {
-            while (wall.hasIntersection(box)) box.y -= 1;
+            while (wall.area.hasIntersection(box)) box.y -= 1;
         }
     }
-    blood.id = game.world.appendActor(box);
-    game.blood.append(blood);
+    blood.id = game.world.pushActor(box);
+    game.blood.push(blood);
 }
 
 void moveWorms(Vec2 target) {
@@ -594,8 +593,6 @@ bool update(float dt) {
     auto o = DrawOptions();
     if (checkKeyboardShortcuts()) return true;
     game.fadingArea.position = game.fadingArea.position.moveToWithSlowdown(game.fadingTarget, Vec2(dt), 0.3f);
-    game.finTimer.update(dt);
-    game.outroTimer.update(dt);
     // Update the world.
     with (GameMode) final switch (game.mode) {
         case intro:
@@ -625,8 +622,8 @@ bool update(float dt) {
             if (game.fadingArea.y <= 10 && !game.oneFadeForTheEndBoys && game.isEnding) {
                 game.oneFadeForTheEndBoys = true;
                 game.canHideHp = true;
-                game.map.parse(loadTempText("end.csv").getOr(), 8, 8);
-                game.world.parseWalls(loadTempText("end_walls.csv").getOr(), 8, 8);
+                game.map.parseCsv(loadTempText("end.csv").getOr(), 8, 8);
+                game.world.parseWallsCsv(loadTempText("end_walls.csv").getOr(), 8, 8);
                 getActor(game.player.id).position = IVec2(8 * 10 + 2, 8 * 3 + 4);
                 setBorderColor(Pico8.black);
                 setBackgroundColor(Pico8.black);
@@ -675,7 +672,7 @@ bool update(float dt) {
                     }
                 }
                 if (game.player.hp == 0) {
-                    if (!game.finTimer.isRunning && isActionPressed) game.mode = outro;
+                    if (!game.finTimer.isActive && isActionPressed) game.mode = outro;
                 }
                 if (!game.bloodDone && game.bloodCounterArea1.count >= bloodTargetCount && game.bloodCounterArea2.count >= bloodTargetCount) {
                     game.bloodDone = true;
@@ -732,7 +729,7 @@ bool update(float dt) {
             // Draw the UI.
             o = DrawOptions(Hook.bottomLeft);
             o.color = Pico8.white;
-            if (game.isDebugging) drawDebugEngineInfo(Vec2(4, resolutionHeight - 4), o);
+            if (game.isDebugging) drawDebugEngineInfo(Vec2(4, resolutionHeight - 4), Camera(), o);
             if (!game.canHideHp) {
                 o = DrawOptions(Hook.bottom);
                 o.color = Pico8.purple;

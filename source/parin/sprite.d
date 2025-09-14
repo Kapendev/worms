@@ -1,20 +1,16 @@
 // ---
-// Copyright 2024 Alexandros F. G. Kapretsos
+// Copyright 2025 Alexandros F. G. Kapretsos
 // SPDX-License-Identifier: MIT
 // Email: alexandroskapretsos@gmail.com
 // Project: https://github.com/Kapendev/parin
-// Version: v0.0.44
 // ---
-
-// TODO: Think about gaps in an atlas texture.
-// TODO: Update all the doc comments here.
 
 /// The `sprite` module provides a simple and flexible sprite.
 module parin.sprite;
 
 import parin.engine;
 
-@safe @nogc nothrow:
+@safe nothrow @nogc:
 
 struct SpriteAnimation {
     ubyte frameRow;
@@ -31,7 +27,7 @@ struct SpriteAnimationGroup2 {
 
     enum angleStep = 180.0f;
 
-    @safe @nogc nothrow:
+    @safe nothrow @nogc:
 
     SpriteAnimation pick(float angle) {
         auto id = (cast(int) round(snap(angle, angleStep) / angleStep)) % frameRows.length;
@@ -47,7 +43,7 @@ struct SpriteAnimationGroup4 {
 
     enum angleStep = 90.0f;
 
-    @safe @nogc nothrow:
+    @safe nothrow @nogc:
 
     SpriteAnimation pick(float angle) {
         // NOTE: This is a hack to make things look better in simple cases.
@@ -68,7 +64,7 @@ struct SpriteAnimationGroup8 {
 
     enum angleStep = 45.0f;
 
-    @safe @nogc nothrow:
+    @safe nothrow @nogc:
 
     SpriteAnimation pick(float angle) {
         auto id = (cast(int) round(snap(angle, angleStep) / angleStep)) % frameRows.length;
@@ -84,7 +80,7 @@ struct SpriteAnimationGroup16 {
 
     enum angleStep = 22.5f;
 
-    @safe @nogc nothrow:
+    @safe nothrow @nogc:
 
     SpriteAnimation pick(float angle) {
         auto id = (cast(int) round(snap(angle, angleStep) / angleStep)) % frameRows.length;
@@ -92,119 +88,173 @@ struct SpriteAnimationGroup16 {
     }
 }
 
+/// A sprite with support for animation, positioning, and movement.
 struct Sprite {
-    int width;
-    int height;
-    ushort atlasLeft;
-    ushort atlasTop;
-    float frameProgress = 0.0f;
-    SpriteAnimation animation;
-    Vec2 position;
-    bool isPaused;
-    bool isPlaying;
+    short width;                /// The width of the sprite.
+    short height;               /// The height of the sprite.
+    ushort atlasLeft;           /// X offset in the texture atlas.
+    ushort atlasTop;            /// Y offset in the texture atlas.
+    float frameProgress = 0.0f; /// The current animation progress. The value is between 0 and animation.frameCount (exclusive).
+    bool isPaused;              /// The pause state of the sprite.
+    SpriteAnimation animation;  /// The current animation.
+    Vec2 position;              /// The position of the sprite.
+    Hook hook;                  /// A value representing the origin point of the drawn object when origin is zero.
+    Flip flip;                  /// A value representing flipping orientations.
 
-    @safe @nogc nothrow:
+    @safe nothrow @nogc:
 
-    this(int width, int height, ushort atlasLeft, ushort atlasTop, Vec2 position = Vec2()) {
+    deprecated("Will be replaced with isActive.")
+    alias isRunning = isActive;
+
+    /// Initializes the sprite with the specified size, atlas position, and optional world position.
+    this(short width, short height, ushort atlasLeft, ushort atlasTop, Vec2 position = Vec2(), Hook hook = Hook.topLeft) {
         this.width = width;
         this.height = height;
         this.atlasLeft = atlasLeft;
         this.atlasTop = atlasTop;
         this.position = position;
+        this.hook = hook;
     }
 
-    bool hasAnimation() {
-        return animation.frameCount != 0;
+    /// Initializes the sprite with the specified size, atlas position, and world position.
+    this(short width, short height, ushort atlasLeft, ushort atlasTop, float x, float y, Hook hook = Hook.topLeft) {
+        this(width, height, atlasLeft, atlasTop, Vec2(x, y), hook);
     }
 
-    bool hasFirstFrame() {
-        return frame == 0;
+    this(short width, short height, ushort atlasLeft, ushort atlasTop, Hook hook) {
+        this(width, height, atlasLeft, atlasTop, Vec2(), hook);
     }
 
-    bool hasLastFrame() {
-        return hasAnimation ? (frame == animation.frameCount - 1) : true;
-    }
+    pragma(inline, true) {
+        @trusted ref float x() => position.x;
+        @trusted ref float y() => position.y;
+        Vec2 size() => Vec2(width, height);
+        Rect area() => Rect(position, width, height).area(hook); // NOTE: Can be bad if someone sets a custom origin in the options.
+        bool hasSize() => width != 0 && height != 0;
 
-    bool hasFirstFrameProgress() {
-        return frameProgress == 0.0f;
-    }
+        /// Returns true if the sprite is currently active (running).
+        bool isActive() {
+            return animation.frameCount != 0;
+        }
 
-    bool hasLastFrameProgress() {
-        return hasAnimation ? (frameProgress.fequals(animation.frameCount - epsilon)) : true;
-    }
+        /// Returns true if the sprite has an animation assigned.
+        bool hasAnimation() {
+            return isActive;
+        }
 
-    Vec2 size() {
-        return Vec2(width, height);
-    }
+        /// Returns true if the sprite is on the first animation frame.
+        bool hasFirstFrame() {
+            return hasAnimation ? frame == 0 : false;
+        }
 
-    int frame() {
-        return cast(int) frameProgress;
-    }
+        /// Returns true if the sprite is on the last animation frame.
+        bool hasLastFrame() {
+            return hasAnimation ? frame == animation.frameCount - 1 : false;
+        }
 
-    void reset(int resetFrame = 0) {
-        frameProgress = resetFrame;
-    }
+        /// Returns true if the sprite is on the first animation frame progress.
+        bool hasFirstFrameProgress() {
+            return hasAnimation ? frameProgress.fequals(0.0f) : false;
+        }
 
-    void play(SpriteAnimation newAnimation, bool canKeepProgress = false) {
-        if (isPaused || animation == newAnimation) return;
-        if (!canKeepProgress) reset();
-        animation = newAnimation;
-        isPlaying = true;
-    }
+        /// Returns true if the sprite is on the last animation frame progress.
+        bool hasLastFrameProgress() {
+            return hasAnimation ? frameProgress.fequals(animation.frameCount - epsilon) : false;
+        }
 
-    void stop() {
-        if (isPaused) return;
-        play(SpriteAnimation());
-        isPlaying = false;
-    }
+        /// Returns the current animation frame of the sprite.
+        int frame() {
+            return cast(int) frameProgress;
+        }
 
-    void pause() {
-        isPaused = true;
-    }
+        /// Resets the animation frame of the sprite.
+        void reset(int resetFrame = 0) {
+            frameProgress = resetFrame;
+        }
 
-    void resume() {
-        isPaused = false;
-    }
+        /// Starts playing a new animation, optionally preserving current frame progress.
+        void play(SpriteAnimation newAnimation, bool canKeepProgress = false) {
+            if (animation == newAnimation) return;
+            if (!canKeepProgress) frameProgress = 0.0f;
+            animation = newAnimation;
+            isPaused = false;
+        }
 
-    void update(float dt) {
-        if (!hasAnimation || isPaused || !isPlaying) return;
-        if (animation.canRepeat) frameProgress = fmod(frameProgress + animation.frameSpeed * dt, animation.frameCount);
-        else frameProgress = min(frameProgress + animation.frameSpeed * dt, animation.frameCount - epsilon);
-    }
+        /// Stops the current animation of the sprite.
+        void stop() {
+            play(SpriteAnimation());
+        }
 
-    /// Moves the sprite to follow the target position at the specified speed.
-    void followPosition(Vec2 target, float speed) {
-        position = position.moveTo(target, Vec2(speed));
-    }
+        /// Pauses the current animation of the sprite.
+        void pause() {
+            isPaused = true;
+        }
 
-    /// Moves the sprite to follow the target position with gradual slowdown.
-    void followPositionWithSlowdown(Vec2 target, float slowdown) {
-        position = position.moveToWithSlowdown(target, Vec2(deltaTime), slowdown);
+        /// Resumes the current animation of the sprite.
+        void resume() {
+            isPaused = false;
+        }
+
+        /// Toggles the paused state of the sprite.
+        void toggleIsPaused() {
+            if (isPaused) resume();
+            else pause();
+        }
+
+        /// Updates the state of the sprite.
+        void update(float dt) {
+            if (!isActive || isPaused) return;
+            if (animation.canRepeat) frameProgress = fmod(frameProgress + animation.frameSpeed * dt, animation.frameCount);
+            else frameProgress = min(frameProgress + animation.frameSpeed * dt, animation.frameCount - epsilon);
+        }
+
+        /// Moves the sprite to follow the target position at the specified speed.
+        void followPosition(Vec2 target, float speed) {
+            position = position.moveTo(target, Vec2(speed));
+        }
+
+        /// Moves the sprite to follow the target position with gradual slowdown.
+        void followPositionWithSlowdown(Vec2 target, float slowdown) {
+            position = position.moveToWithSlowdown(target, Vec2(deltaTime), slowdown);
+        }
     }
 }
 
-void drawSpriteX(Texture texture, Sprite sprite, DrawOptions options = DrawOptions()) {
-    if (sprite.width == 0 || sprite.height == 0) return;
-    if (texture.isEmpty) {
-        if (isEmptyTextureVisible) {
-            auto rect = Rect(sprite.position, sprite.size * options.scale).area(options.hook);
-            drawRect(rect, defaultEngineEmptyTextureColor);
-            drawHollowRect(rect, 1, black);
+void drawSprite(Texture texture, Sprite sprite, DrawOptions options = DrawOptions()) {
+    options.hook = sprite.hook; // NOTE: Might be a bad idea in the future.
+    options.flip = sprite.flip; // NOTE: Might be a bad idea in the future.
+
+    version (ParinSkipDrawChecks) {
+    } else {
+        if (texture.isEmpty) {
+            if (isEmptyTextureVisible) {
+                auto rect = Rect(sprite.position, sprite.size * options.scale).area(options.hook);
+                drawRect(rect, defaultEngineEmptyTextureColor);
+                drawHollowRect(rect, 1, black);
+            }
+            return;
         }
-        return;
+        if (!sprite.hasSize) return;
     }
 
     auto top = sprite.atlasTop + sprite.animation.frameRow * sprite.height;
-    auto gridWidth = max(texture.width - sprite.atlasLeft, 0) / sprite.width;
-    auto gridHeight = max(texture.height - top, 0) / sprite.height;
-    if (gridWidth == 0 || gridHeight == 0) return;
+    auto gridWidth = max(texture.width - sprite.atlasLeft, 0) / sprite.width; // NOTE: Could be saved maybe.
+
+    version (ParinSkipDrawChecks) {
+    } else {
+        if (gridWidth == 0) return;
+    }
 
     auto row = sprite.frame / gridWidth;
     auto col = sprite.frame % gridWidth;
     auto area = Rect(sprite.atlasLeft + col * sprite.width, top + row * sprite.height, sprite.width, sprite.height);
-    drawTextureAreaX(texture, area, sprite.position, options);
+    drawTextureArea(texture, area, sprite.position, options);
 }
 
 void drawSprite(TextureId texture, Sprite sprite, DrawOptions options = DrawOptions()) {
-    drawSpriteX(texture.getOr(), sprite, options);
+    drawSprite(texture.getOr(), sprite, options);
+}
+
+void drawSprite(Sprite sprite, DrawOptions options = DrawOptions()) {
+    drawSprite(defaultTexture.getOr(), sprite, options);
 }

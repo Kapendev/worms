@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 // Email: alexandroskapretsos@gmail.com
 // Project: https://github.com/Kapendev/joka
-// Version: v0.0.24
 // ---
 
 /// The `ascii` module provides functions designed to assist with ascii strings.
@@ -14,12 +13,16 @@ import joka.types;
 
 @safe:
 
-enum digitChars = "0123456789";                          /// The set of digits.
-enum upperChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";          /// The set of uppercase letters.
-enum lowerChars = "abcdefghijklmnopqrstuvwxyz";          /// The set of lowercase letters.
-enum alphaChars = upperChars ~ lowerChars;               /// The set of letters.
-enum spaceChars = " \t\v\r\n\f";                         /// The set of whitespace characters.
-enum symbolChars = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~"; /// The set of symbol characters.
+enum defaultAsciiBufferSize = 1024;
+enum defaultAsciiBufferCount = 8;
+
+enum digitChars    = "0123456789";                         /// The set of decimal numeric characters.
+enum upperChars    = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";         /// The set of uppercase letters.
+enum lowerChars    = "abcdefghijklmnopqrstuvwxyz";         /// The set of lowercase letters.
+enum alphaChars    = upperChars ~ lowerChars;              /// The set of letters.
+enum spaceChars    = " \t\v\r\n\f";                        /// The set of whitespace characters.
+enum symbolChars   = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~"; /// The set of symbol characters.
+enum hexDigitChars = "0123456789abcdefABCDEF";             /// The set of hexadecimal numeric characters.
 
 version (Windows) {
     enum pathSep = '\\';
@@ -54,6 +57,9 @@ IStr toStr(T)(T value) {
         return enumToStr(value);
     } else static if (hasMember!(T, "toStr")) {
         return value.toStr();
+    } else static if (hasMember!(T, "toString")) {
+        // I'm a nice person.
+        return value.toString();
     } else {
         static assert(0, funcImplementationErrorMessage!(T, "toStr"));
     }
@@ -105,83 +111,83 @@ IStr fmtIntoBuffer(A...)(Str buffer, IStr fmtStr, A args) {
 /// For details on formatting, see the `formatIntoBuffer` function.
 @trusted
 IStr fmt(A...)(IStr fmtStr, A args) {
-    static char[512][8] buffers = void;
+    static char[defaultAsciiBufferSize][defaultAsciiBufferCount] buffers = void;
     static byte bufferIndex = 0;
 
     bufferIndex = (bufferIndex + 1) % buffers.length;
     return fmtIntoBuffer(buffers[bufferIndex][], fmtStr, args);
 }
 
-@safe @nogc nothrow:
+@safe nothrow @nogc:
 
-/// Returns true if the character is a symbol (!, ", ...).
-pragma(inline, true);
-bool isSymbol(char c) {
-    return (c >= '!' && c <= '/') || (c >= ':' && c <= '@') || (c >= '[' && c <= '`') || (c >= '{' && c <= '~');
-}
+pragma(inline, true) {
+    /// Returns true if the character is a digit (0-9).
+    bool isDigit(char c) {
+        return c >= '0' && c <= '9';
+    }
 
-/// Returns true if the character is a digit (0-9).
-pragma(inline, true);
-bool isDigit(char c) {
-    return c >= '0' && c <= '9';
-}
+    /// Returns true if the character is an uppercase letter (A-Z).
+    bool isUpper(char c) {
+        return c >= 'A' && c <= 'Z';
+    }
 
-/// Returns true if the character is an uppercase letter (A-Z).
-pragma(inline, true);
-bool isUpper(char c) {
-    return c >= 'A' && c <= 'Z';
-}
+    /// Returns true the character is a lowercase letter (a-z).
+    bool isLower(char c) {
+        return c >= 'a' && c <= 'z';
+    }
 
-/// Returns true the character is a lowercase letter (a-z).
-pragma(inline, true);
-bool isLower(char c) {
-    return c >= 'a' && c <= 'z';
-}
+    /// Returns true if the character is an alphabetic letter (A-Z, a-z).
+    bool isAlpha(char c) {
+        return isLower(c) || isUpper(c);
+    }
 
-/// Returns true if the character is an alphabetic letter (A-Z or a-z).
-pragma(inline, true);
-bool isAlpha(char c) {
-    return isLower(c) || isUpper(c);
-}
+    /// Returns true if the character is a whitespace character (space, tab, ...).
+    bool isSpace(char c) {
+        return (c >= '\t' && c <= '\r') || (c == ' ');
+    }
 
-/// Returns true if the character is a whitespace character (space, tab, ...).
-pragma(inline, true);
-bool isSpace(char c) {
-    return (c >= '\t' && c <= '\r') || (c == ' ');
-}
+    /// Returns true if the character is a symbol (!, ", ...).
+    bool isSymbol(char c) {
+        return (c >= '!' && c <= '/') || (c >= ':' && c <= '@') || (c >= '[' && c <= '`') || (c >= '{' && c <= '~');
+    }
 
-/// Returns true if the string represents a C string.
-pragma(inline, true);
-bool isCStr(IStr str) {
-    return str.length != 0 && str[$ - 1] == '\0';
-}
+    /// Returns true if the character is a hexadecimal digit (0-9, A-F, a-f).
+    bool isHexDigit(char c) {
+        return isDigit(c) || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f');
+    }
 
-/// Converts the character to uppercase if it is a lowercase letter.
-char toUpper(char c) {
-    return isLower(c) ? cast(char) (c - 32) : c;
-}
+    /// Returns true if the string represents a C string.
+    bool isCStr(IStr str) {
+        return str.length != 0 && str[$ - 1] == '\0';
+    }
 
-/// Converts all lowercase letters in the string to uppercase.
-void toUpper(Str str) {
-    foreach (ref c; str) c = toUpper(c);
-}
+    /// Converts the character to uppercase if it is a lowercase letter.
+    char toUpper(char c) {
+        return isLower(c) ? cast(char) (c - 32) : c;
+    }
 
-/// Converts the character to lowercase if it is an uppercase letter.
-char toLower(char c) {
-    return isUpper(c) ? cast(char) (c + 32) : c;
-}
+    /// Converts the character to lowercase if it is an uppercase letter.
+    char toLower(char c) {
+        return isUpper(c) ? cast(char) (c + 32) : c;
+    }
 
-/// Converts all uppercase letters in the string to lowercase.
-void toLower(Str str) {
-    foreach (ref c; str) c = toLower(c);
-}
+    /// Converts all lowercase letters in the string to uppercase.
+    void toUpper(Str str) {
+        foreach (ref c; str) c = toUpper(c);
+    }
 
-/// Returns the length of the C string.
-@trusted
-Sz cStrLength(ICStr str) {
-    Sz result = 0;
-    while (str[result] != '\0') result += 1;
-    return result;
+    /// Converts all uppercase letters in the string to lowercase.
+    void toLower(Str str) {
+        foreach (ref c; str) c = toLower(c);
+    }
+
+    /// Returns the length of the C string.
+    @trusted
+    Sz cStrLength(ICStr str) {
+        Sz result = 0;
+        while (str[result]) result += 1;
+        return result;
+    }
 }
 
 /// Returns true if the two strings are equal, ignoring case.
@@ -357,12 +363,32 @@ IStr concatIntoBuffer(Str buffer, IStr[] args...) {
 
 /// Concatenates the strings using a static buffer and returns the result.
 IStr concat(IStr[] args...) {
-    static char[512][8] buffers = void;
+    static char[defaultAsciiBufferSize][defaultAsciiBufferCount] buffers = void;
     static byte bufferIndex = 0;
 
     if (args.length == 0) return ".";
     bufferIndex = (bufferIndex + 1) % buffers.length;
     return concatIntoBuffer(buffers[bufferIndex][], args);
+}
+
+/// Splits the string using a static buffer and returns the result.
+@trusted
+IStr[] split(IStr str, IStr sep) {
+    static IStr[defaultAsciiBufferSize][defaultAsciiBufferCount] buffers = void;
+    static byte bufferIndex = 0;
+
+    bufferIndex = (bufferIndex + 1) % buffers.length;
+    auto length = 0;
+    while (str.length != 0) {
+        buffers[bufferIndex][length] = str.skipValue(sep);
+        length += 1;
+    }
+    return buffers[bufferIndex][0 .. length];
+}
+
+/// Splits the string using a static buffer and returns the result.
+IStr[] split(IStr str, char sep) {
+    return split(str, charToStr(sep));
 }
 
 /// Returns the directory of the path, or "." if there is no directory.
@@ -419,7 +445,7 @@ IStr pathTrim(IStr path) {
 
 /// Formats the path to a standard form, normalizing separators.
 IStr pathFormat(IStr path) {
-    static char[512][8] buffers = void;
+    static char[defaultAsciiBufferSize][defaultAsciiBufferCount] buffers = void;
     static byte bufferIndex = 0;
 
     if (path.length == 0) return ".";
@@ -438,7 +464,7 @@ IStr pathFormat(IStr path) {
 
 /// Concatenates the paths, ensuring proper path separators between them.
 IStr pathConcat(IStr[] args...) {
-    static char[512][8] buffers = void;
+    static char[defaultAsciiBufferSize][defaultAsciiBufferCount] buffers = void;
     static byte bufferIndex = 0;
 
     if (args.length == 0) return ".";
@@ -470,6 +496,21 @@ IStr pathConcat(IStr[] args...) {
     return result;
 }
 
+/// Splits the path using a static buffer and returns the result.
+@trusted
+IStr[] pathSplit(IStr str) {
+    static IStr[defaultAsciiBufferSize][defaultAsciiBufferCount] buffers = void;
+    static byte bufferIndex = 0;
+
+    bufferIndex = (bufferIndex + 1) % buffers.length;
+    auto length = 0;
+    while (str.length != 0) {
+        buffers[bufferIndex][length] = str.skipValue(pathSep);
+        length += 1;
+    }
+    return buffers[bufferIndex][0 .. length];
+}
+
 /// Skips over the next occurrence of the specified separator in the string, returning the substring before the separator and updating the input string to start after the separator.
 IStr skipValue(ref inout(char)[] str, IStr sep) {
     if (str.length < sep.length || sep.length == 0) {
@@ -498,12 +539,14 @@ IStr skipValue(ref inout(char)[] str, char sep) {
 
 /// Skips over the next line in the string, returning the substring before the line break and updating the input string to start after the line break.
 IStr skipLine(ref inout(char)[] str) {
-    return skipValue(str, '\n');
+    auto result = skipValue(str, '\n');
+    if (result.length != 0 && result[$ - 1] == '\r') result = result[0 .. $ - 1];
+    return result;
 }
 
 /// Converts the boolean value to its string representation.
-IStr boolToStr(bool value) {
-    return value ? "true" : "false";
+IStr boolToStr(bool value, bool shortMode = false) {
+    return value ? (shortMode ? "T" : "true") : (shortMode ? "F" : "false");
 }
 
 /// Converts the character to its string representation.
@@ -555,9 +598,8 @@ IStr signedToStr(long value) {
 IStr doubleToStr(double value, ulong precision = 2) {
     static char[64] buffer = void;
 
-    if (precision == 0) {
-        return signedToStr(cast(long) value);
-    }
+    if (!(value == value)) return "nan";
+    if (precision == 0) return signedToStr(cast(long) value);
 
     auto result = buffer[];
     auto cleanNumber = value;
@@ -623,28 +665,28 @@ IStr enumToStr(T)(T value) {
         static foreach (m; __traits(allMembers, T)) {
             mixin("case T.", m, ": return m;");
         }
-        default: assert(0, "WTF!");
+        default: return "?";
     }
 }
 
 /// Converts the string to a bool.
-Result!bool toBool(IStr str) {
-    if (str == "false") {
-        return Result!bool(false);
-    } else if (str == "true") {
-        return Result!bool(true);
+Maybe!bool toBool(IStr str) {
+    if (str == "false" || str == "F" || str == "f") {
+        return Maybe!bool(false);
+    } else if (str == "true" || str == "T" || str == "t") {
+        return Maybe!bool(true);
     } else {
-        return Result!bool(Fault.cantParse);
+        return Maybe!bool(Fault.cantParse);
     }
 }
 
 /// Converts the string to a ulong.
-Result!ulong toUnsigned(IStr str) {
+Maybe!ulong toUnsigned(IStr str) {
     if (str.length == 0 || str.length >= 18) {
-        return Result!ulong(Fault.overflow);
+        return Maybe!ulong(Fault.overflow);
     } else {
         if (str.length == 1 && str[0] == '+') {
-            return Result!ulong(Fault.cantParse);
+            return Maybe!ulong(Fault.cantParse);
         }
         ulong value = 0;
         ulong level = 1;
@@ -653,96 +695,97 @@ Result!ulong toUnsigned(IStr str) {
                 value += (c - '0') * level;
                 level *= 10;
             } else {
-                return Result!ulong(Fault.cantParse);
+                return Maybe!ulong(Fault.cantParse);
             }
         }
-        return Result!ulong(value);
+        return Maybe!ulong(value);
     }
 }
 
 /// Converts the character to a ulong.
-Result!ulong toUnsigned(char c) {
+Maybe!ulong toUnsigned(char c) {
     if (isDigit(c)) {
-        return Result!ulong(c - '0');
+        return Maybe!ulong(c - '0');
     } else {
-        return Result!ulong(Fault.cantParse);
+        return Maybe!ulong(Fault.cantParse);
     }
 }
 
 /// Converts the string to a long.
-Result!long toSigned(IStr str) {
+Maybe!long toSigned(IStr str) {
     if (str.length == 0 || str.length >= 18) {
-        return Result!long(Fault.overflow);
+        return Maybe!long(Fault.overflow);
     } else {
         auto temp = toUnsigned(str[(str[0] == '-' ? 1 : 0) .. $]);
-        return Result!long(str[0] == '-' ? -temp.value : temp.value, temp.fault);
+        return Maybe!long(str[0] == '-' ? -temp.xx : temp.xx, temp.fault);
     }
 }
 
 /// Converts the character to a long.
-Result!long toSigned(char c) {
+Maybe!long toSigned(char c) {
     if (isDigit(c)) {
-        return Result!long(c - '0');
+        return Maybe!long(c - '0');
     } else {
-        return Result!long(Fault.cantParse);
+        return Maybe!long(Fault.cantParse);
     }
 }
 
 /// Converts the string to a double.
-Result!double toDouble(IStr str) {
+Maybe!double toDouble(IStr str) {
+    if (str == "nan") return Maybe!double(double.nan);
     auto dotIndex = findStart(str, '.');
     if (dotIndex == -1) {
         auto temp = toSigned(str);
-        return Result!double(temp.value, temp.fault);
+        return Maybe!double(temp.xx, temp.fault);
     } else {
         auto left = toSigned(str[0 .. dotIndex]);
         auto right = toSigned(str[dotIndex + 1 .. $]);
         if (left.isNone || right.isNone) {
-            return Result!double(Fault.cantParse);
+            return Maybe!double(Fault.cantParse);
         } else if (str[dotIndex + 1] == '-' || str[dotIndex + 1] == '+') {
-            return Result!double(Fault.cantParse);
+            return Maybe!double(Fault.cantParse);
         } else {
             auto sign = str[0] == '-' ? -1 : 1;
             auto level = 10;
             foreach (i; 1 .. str[dotIndex + 1 .. $].length) {
                 level *= 10;
             }
-            return Result!double(left.value + sign * (right.value / (cast(double) level)));
+            return Maybe!double(left.xx + sign * (right.xx / (cast(double) level)));
         }
     }
 }
 
 /// Converts the character to a double.
-Result!double toDouble(char c) {
+Maybe!double toDouble(char c) {
     if (isDigit(c)) {
-        return Result!double(c - '0');
+        return Maybe!double(c - '0');
     } else {
-        return Result!double(Fault.cantParse);
+        return Maybe!double(Fault.cantParse);
     }
 }
 
 /// Converts the string to an enum value.
-Result!T toEnum(T)(IStr str) {
+Maybe!T toEnum(T)(IStr str) {
     switch (str) {
         static foreach (m; __traits(allMembers, T)) {
-            mixin("case m: return Result!T(T.", m, ");");
+            mixin("case m: return Maybe!T(T.", m, ");");
         }
-        default: return Result!T(Fault.cantParse);
+        default: return Maybe!T(Fault.cantParse);
     }
 }
 
 /// Converts the string to a C string.
 @trusted
-Result!ICStr toCStr(IStr str) {
-    static char[512] buffer = void;
+Maybe!ICStr toCStr(IStr str) {
+    static char[defaultAsciiBufferSize] buffer = void;
 
     if (buffer.length < str.length) {
-        return Result!ICStr(Fault.cantParse);
+        return Maybe!ICStr(Fault.cantParse);
     } else {
         auto value = buffer[];
         value.copyChars(str);
         value[str.length] = '\0';
-        return Result!ICStr(value.ptr);
+        return Maybe!ICStr(value.ptr);
     }
 }
 
@@ -813,6 +856,14 @@ unittest {
     assert(str.advanceStr(1) == str[1 .. $]);
     assert(str.advanceStr(str.length) == "");
     assert(str.advanceStr(str.length + 1) == "");
+
+    str = buffer[];
+    str.copyStr("999: Nine Hours, Nine Persons, Nine Doors");
+    assert(str.split(',').length == 3);
+    assert(str.split(',')[0] == "999: Nine Hours");
+    assert(str.split(',')[1] == " Nine Persons");
+    assert(str.split(',')[2] == " Nine Doors");
+
     version (Windows) {
     } else {
         assert(pathConcat("one", "two") == "one/two");
@@ -839,9 +890,13 @@ unittest {
     assert(skipValue(str, ',') == "three");
     assert(skipValue(str, ',') == "");
     assert(str.length == 0);
+    assert(skipValue(str, "\r\n") == "");
+    assert(skipLine(str) == "");
 
     assert(boolToStr(false) == "false");
     assert(boolToStr(true) == "true");
+    assert(boolToStr(false, true) == "F");
+    assert(boolToStr(true, true) == "T");
     assert(charToStr('L') == "L");
 
     assert(unsignedToStr(0) == "0");
@@ -868,20 +923,19 @@ unittest {
     assert(doubleToStr(-0.69, 1) == "-0.6");
     assert(doubleToStr(-0.69, 2) == "-0.69");
     assert(doubleToStr(-0.69, 3) == "-0.690");
+    assert(doubleToStr(double.nan) == "nan");
 
     assert(cStrToStr("Hello\0") == "Hello");
 
     assert(enumToStr(TestEnum.one) == "one");
     assert(enumToStr(TestEnum.two) == "two");
 
-    assert(toBool("F").isSome == false);
-    assert(toBool("F").getOr() == false);
-    assert(toBool("T").isSome == false);
-    assert(toBool("T").getOr() == false);
     assert(toBool("false").isSome == true);
-    assert(toBool("false").getOr() == false);
+    assert(toBool("F").isSome == true);
+    assert(toBool("f").isSome == true);
     assert(toBool("true").isSome == true);
-    assert(toBool("true").getOr() == true);
+    assert(toBool("T").isSome == true);
+    assert(toBool("t").isSome == true);
 
     assert(toUnsigned("1_069").isSome == false);
     assert(toUnsigned("1_069").getOr() == 0);
@@ -949,6 +1003,7 @@ unittest {
     assert(toDouble('0').getOr() == 0);
     assert(toDouble('9').isSome == true);
     assert(toDouble('9').getOr() == 9);
+    assert(!(toDouble("nan").getOr() == double.nan));
 
     assert(toEnum!TestEnum("?").isSome == false);
     assert(toEnum!TestEnum("?").getOr() == TestEnum.one);

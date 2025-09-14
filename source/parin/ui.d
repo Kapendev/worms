@@ -1,10 +1,13 @@
 // ---
-// Copyright 2024 Alexandros F. G. Kapretsos
+// Copyright 2025 Alexandros F. G. Kapretsos
 // SPDX-License-Identifier: MIT
 // Email: alexandroskapretsos@gmail.com
 // Project: https://github.com/Kapendev/parin
-// Version: v0.0.44
 // ---
+
+// TODO: Add some helper function for arcade-like menus.
+//  Example: https://x.com/hiulit/status/1930230660242747554/photo/3
+//  This example is also nice because it changes some stuff based on the game resolution.
 
 /// The `ui` module functions as a immediate mode UI library.
 module parin.ui;
@@ -14,10 +17,10 @@ import joka.ascii;
 import joka.memory;
 import parin.engine;
 
-@safe @nogc nothrow:
+@safe nothrow:
 
-UiState* uiState;
-UiState* uiPreviousState;
+UiState* _uiState;
+UiState* _uiPreviousState;
 
 enum defaultUiDisabledColor = 0x202020.toRgb();
 enum defaultUiIdleColor = 0x414141.toRgb();
@@ -56,7 +59,7 @@ struct UiOptions {
     Vec2 dragLimitY = Vec2(-100000.0f, 100000.0f);
     bool isDisabled = false;
 
-    @safe @nogc nothrow:
+    @safe nothrow @nogc:
 
     this(ubyte fontScale) {
         this.fontScale = fontScale;
@@ -95,6 +98,23 @@ struct UiState {
     short previousMaxHotItemIdBuffer;
 }
 
+@trusted
+void prepareUi() {
+    if (_uiState == null) {
+        // NOTE: This leaks. THIS IS SO BAD WHERE IS `Box::leak` IN THIS CODEBASE???
+        _uiState = jokaMake!UiState();
+        _uiPreviousState = jokaMake!UiState();
+    }
+    setUiViewportState(Vec2(), resolution, Vec2(1.0f));
+    _uiState.itemId = 0;
+    _uiState.hotItemId = 0;
+    _uiState.activeItemId = 0;
+    _uiState.clickedItemId = 0;
+    _uiState.previousMaxHotItemId = _uiState.previousMaxHotItemIdBuffer;
+}
+
+@safe nothrow @nogc:
+
 bool isSpaceInTextField(char c) {
     return c == ' ' || c == '_' || c == '.';
 }
@@ -109,173 +129,158 @@ int findSpaceInTextField(IStr text) {
     return result;
 }
 
-@trusted
-void prepareUi() {
-    if (uiState == null) {
-        // NOTE: This leaks. THIS IS SO BAD WHERE IS `Box::leak` IN THIS CODEBASE???
-        uiState = jokaMake!UiState();
-        uiPreviousState = jokaMake!UiState();
-    }
-    setUiViewportState(Vec2(), resolution, Vec2(1.0f));
-    uiState.itemId = 0;
-    uiState.hotItemId = 0;
-    uiState.activeItemId = 0;
-    uiState.clickedItemId = 0;
-    uiState.previousMaxHotItemId = uiState.previousMaxHotItemIdBuffer;
-}
-
 Vec2 uiMouse() {
-    return uiState.mouseBuffer;
+    return _uiState.mouseBuffer;
 }
 
 void setUiClickAction(Mouse value) {
-    uiState.mouseClickAction = value;
+    _uiState.mouseClickAction = value;
 }
 
 void setUiClickAction(Keyboard value) {
-    uiState.keyboardClickAction = value;
+    _uiState.keyboardClickAction = value;
 }
 
 void setUiClickAction(Gamepad value) {
-    uiState.gamepadClickAction = value;
+    _uiState.gamepadClickAction = value;
 }
 
 bool isUiActOnPress() {
-    return uiState.isActOnPress;
+    return _uiState.isActOnPress;
 }
 
 void setIsUiActOnPress(bool value) {
-    uiState.isActOnPress = value;
+    _uiState.isActOnPress = value;
 }
 
 void setUiViewportState(Vec2 position, Vec2 size, Vec2 scale) {
-    uiState.viewportPosition = position;
-    uiState.viewportSize = size;
-    uiState.viewportScale = scale;
-    if (uiState.mouseClickAction.isPressed) {
-        uiState.mousePressedPosition = uiMouse;
+    _uiState.viewportPosition = position;
+    _uiState.viewportSize = size;
+    _uiState.viewportScale = scale;
+    if (_uiState.mouseClickAction.isPressed) {
+        _uiState.mousePressedPosition = uiMouse;
     }
-    uiState.mouseBuffer = (mouse - position) / scale;
-    if (uiState.mouseBuffer.x < 0) uiState.mouseBuffer.x = -100000.0f;
-    else if (uiState.mouseBuffer.x > size.x) uiState.mouseBuffer.x = 100000.0f;
-    if (uiState.mouseBuffer.y < 0) uiState.mouseBuffer.y = -100000.0f;
-    else if (uiState.mouseBuffer.y > size.y) uiState.mouseBuffer.y = 100000.0f;
+    _uiState.mouseBuffer = (mouse - position) / scale;
+    if (_uiState.mouseBuffer.x < 0) _uiState.mouseBuffer.x = -100000.0f;
+    else if (_uiState.mouseBuffer.x > size.x) _uiState.mouseBuffer.x = 100000.0f;
+    if (_uiState.mouseBuffer.y < 0) _uiState.mouseBuffer.y = -100000.0f;
+    else if (_uiState.mouseBuffer.y > size.y) _uiState.mouseBuffer.y = 100000.0f;
 }
 
 short uiItemId() {
-    return uiState.itemId;
+    return _uiState.itemId;
 }
 
 bool isUiItemHot() {
-    return uiState.itemId == uiState.hotItemId;
+    return _uiState.itemId == _uiState.hotItemId;
 }
 
 bool isUiHot() {
-    return uiState.hotItemId > 0;
+    return _uiState.hotItemId > 0;
 }
 
 bool isUiItemActive() {
-    return uiState.itemId == uiState.activeItemId;
+    return _uiState.itemId == _uiState.activeItemId;
 }
 
 bool isUiActive() {
-    return uiState.activeItemId > 0;
+    return _uiState.activeItemId > 0;
 }
 
 bool isUiItemClicked() {
-    return uiState.itemId == uiState.clickedItemId;
+    return _uiState.itemId == _uiState.clickedItemId;
 }
 
 bool isUiClicked() {
-    return uiState.clickedItemId > 0;
+    return _uiState.clickedItemId > 0;
 }
 
 bool isUiItemDragged() {
-    return uiState.itemId == uiState.draggedItemId && !deltaMouse.isZero;
+    return _uiState.itemId == _uiState.draggedItemId && !deltaMouse.isZero;
 }
 
 bool isUiDragged() {
-    return uiState.draggedItemId > 0 && !deltaMouse.isZero;
+    return _uiState.draggedItemId > 0 && !deltaMouse.isZero;
 }
 
 Vec2 uiDragOffset() {
-    return uiState.itemDragOffset;
+    return _uiState.itemDragOffset;
 }
 
 bool isUiItemFocused() {
-    return uiState.itemId == uiState.focusedItemId;
+    return _uiState.itemId == _uiState.focusedItemId;
 }
 
 bool isUiFocused() {
-    return uiState.focusedItemId > 0;
+    return _uiState.focusedItemId > 0;
 }
 
 short uiFocus() {
-    return uiState.focusedItemId;
+    return _uiState.focusedItemId;
 }
 
 void setUiFocus(short id) {
-    uiState.focusedItemId = id;
+    _uiState.focusedItemId = id;
 }
 
 void clampUiFocus(short step, Sz length) {
-    auto min = cast(short) (uiState.itemId + 1);
+    auto min = cast(short) (_uiState.itemId + 1);
     auto max = cast(short) (length - 1 + min);
-    auto isOutside = uiState.focusedItemId < min || uiState.focusedItemId > max;
+    auto isOutside = _uiState.focusedItemId < min || _uiState.focusedItemId > max;
     if (step == 0) {
-        uiState.focusedItemId = min;
+        _uiState.focusedItemId = min;
         return;
     }
     if (isOutside) {
         if (step < 0) {
-            uiState.focusedItemId = max;
+            _uiState.focusedItemId = max;
             return;
         } else {
-            uiState.focusedItemId = min;
+            _uiState.focusedItemId = min;
             return;
         }
     }
-    uiState.focusedItemId = clamp(cast(short) (uiState.focusedItemId + step), min, max);
+    _uiState.focusedItemId = clamp(cast(short) (_uiState.focusedItemId + step), min, max);
 }
 
 void wrapUiFocus(short step, Sz length) {
-    auto min = cast(short) (uiState.itemId + 1);
+    auto min = cast(short) (_uiState.itemId + 1);
     auto max = cast(short) (length - 1 + min);
-    auto isOutside = uiState.focusedItemId < min || uiState.focusedItemId > max;
+    auto isOutside = _uiState.focusedItemId < min || _uiState.focusedItemId > max;
     if (step == 0) {
-        uiState.focusedItemId = min;
+        _uiState.focusedItemId = min;
         return;
     }
     if (isOutside) {
         if (step < 0) {
-            uiState.focusedItemId = max;
+            _uiState.focusedItemId = max;
             return;
         } else {
-            uiState.focusedItemId = min;
+            _uiState.focusedItemId = min;
             return;
         }
     }
-    uiState.focusedItemId = wrap(cast(short) (uiState.focusedItemId + step), min, cast(short) (max + 1));
+    _uiState.focusedItemId = wrap(cast(short) (_uiState.focusedItemId + step), min, cast(short) (max + 1));
 }
 
 void updateUiState(Rect area, bool isHot, bool isActive, bool isClicked) {
-    *uiPreviousState = *uiState;
-    uiState.itemId += 1;
+    *_uiPreviousState = *_uiState;
+    _uiState.itemId += 1;
     if (isHot) {
-        uiState.hotItemId = uiState.itemId;
+        _uiState.hotItemId = _uiState.itemId;
     }
     if (isActive) {
-        uiState.activeItemId = uiState.itemId;
-        uiState.focusedItemId = uiState.itemId;
+        _uiState.activeItemId = _uiState.itemId;
+        _uiState.focusedItemId = _uiState.itemId;
     }
-    if (isClicked) uiState.clickedItemId = uiState.itemId;
-    if (uiState.mouseClickAction.isPressed && uiState.itemId == uiState.activeItemId) {
+    if (isClicked) _uiState.clickedItemId = _uiState.itemId;
+    if (_uiState.mouseClickAction.isPressed && _uiState.itemId == _uiState.activeItemId) {
         auto m = uiMouse;
-        uiState.itemDragOffset = area.position - m;
-        uiState.draggedItemId = uiState.itemId;
+        _uiState.itemDragOffset = area.position - m;
+        _uiState.draggedItemId = _uiState.itemId;
     }
-    if (uiState.draggedItemId) {
-        if (uiState.mouseClickAction.isReleased) uiState.draggedItemId = 0;
+    if (_uiState.draggedItemId) {
+        if (_uiState.mouseClickAction.isReleased) _uiState.draggedItemId = 0;
     }
 }
 
@@ -315,31 +320,31 @@ void uiText(Rect area, IStr text, UiOptions options = UiOptions()) {
 
 bool updateUiButton(Rect area, IStr text, UiOptions options = UiOptions()) {
     auto m = uiMouse;
-    auto id = uiState.itemId + 1;
+    auto id = _uiState.itemId + 1;
     auto isHot = area.hasPointInclusive(m);
     if (isHot) {
-        uiState.previousMaxHotItemIdBuffer = cast(short) id;
+        _uiState.previousMaxHotItemIdBuffer = cast(short) id;
     }
-    if (uiState.previousMaxHotItemId) {
-        isHot = isHot && id == uiState.previousMaxHotItemId;
+    if (_uiState.previousMaxHotItemId) {
+        isHot = isHot && id == _uiState.previousMaxHotItemId;
     }
-    auto isActive = isHot && uiState.mouseClickAction.isDown;
+    auto isActive = isHot && _uiState.mouseClickAction.isDown;
     auto isClicked = isHot;
-    if (uiState.isActOnPress) {
-        isClicked = isClicked && uiState.mouseClickAction.isPressed;
+    if (_uiState.isActOnPress) {
+        isClicked = isClicked && _uiState.mouseClickAction.isPressed;
     } else {
-        auto isHotFromMousePressedPosition = area.hasPointInclusive(uiState.mousePressedPosition);
-        isClicked = isClicked && isHotFromMousePressedPosition && uiState.mouseClickAction.isReleased;
+        auto isHotFromMousePressedPosition = area.hasPointInclusive(_uiState.mousePressedPosition);
+        isClicked = isClicked && isHotFromMousePressedPosition && _uiState.mouseClickAction.isReleased;
     }
 
     if (options.isDisabled) {
         isHot = false;
         isActive = false;
         isClicked = false;
-    } else if (id == uiState.focusedItemId) {
+    } else if (id == _uiState.focusedItemId) {
         isHot = true;
-        if (uiState.keyboardClickAction.isDown || uiState.gamepadClickAction.isDown) isActive = true;
-        if (uiState.keyboardClickAction.isPressed || uiState.gamepadClickAction.isPressed) isClicked = true;
+        if (_uiState.keyboardClickAction.isDown || _uiState.gamepadClickAction.isDown) isActive = true;
+        if (_uiState.keyboardClickAction.isPressed || _uiState.gamepadClickAction.isPressed) isClicked = true;
     }
     updateUiState(area, isHot, isActive, isClicked);
     return isClicked;
@@ -366,18 +371,18 @@ bool updateUiDragHandle(ref Rect area, UiOptions options = UiOptions()) {
     final switch (options.dragLimit) {
         case UiDragLimit.none: break;
         case UiDragLimit.viewport:
-            dragLimitX = Vec2(0.0f, uiState.viewportSize.x);
-            dragLimitY = Vec2(0.0f, uiState.viewportSize.y);
+            dragLimitX = Vec2(0.0f, _uiState.viewportSize.x);
+            dragLimitY = Vec2(0.0f, _uiState.viewportSize.y);
             break;
         case UiDragLimit.viewportAndX:
-            area.position.y = clamp(area.position.y, 0.0f, uiState.viewportSize.y - area.size.y);
-            dragLimitX = Vec2(0.0f, uiState.viewportSize.x);
+            area.position.y = clamp(area.position.y, 0.0f, _uiState.viewportSize.y - area.size.y);
+            dragLimitX = Vec2(0.0f, _uiState.viewportSize.x);
             dragLimitY = Vec2(area.position.y, area.position.y + area.size.y);
             break;
         case UiDragLimit.viewportAndY:
-            area.position.x = clamp(area.position.x, 0.0f, uiState.viewportSize.x - area.size.x);
+            area.position.x = clamp(area.position.x, 0.0f, _uiState.viewportSize.x - area.size.x);
             dragLimitX = Vec2(area.position.x, area.position.x + area.size.x);
-            dragLimitY = Vec2(0.0f, uiState.viewportSize.y);
+            dragLimitY = Vec2(0.0f, _uiState.viewportSize.y);
             break;
         case UiDragLimit.custom:
             dragLimitX = options.dragLimitX;
@@ -399,10 +404,10 @@ bool updateUiDragHandle(ref Rect area, UiOptions options = UiOptions()) {
     area.position.y = clamp(area.position.y, dragLimitY.x, dragLimitY.y - area.size.y);
     updateUiButton(area, "", options);
     if (isUiItemDragged) {
-        auto m = (mouse - uiState.viewportPosition) / uiState.viewportScale; // NOTE: Maybe this should be a function?
+        auto m = (mouse - _uiState.viewportPosition) / _uiState.viewportScale; // NOTE: Maybe this should be a function?
         area.position.y = clamp(m.y + uiDragOffset.y, dragLimitY.x, dragLimitY.y - area.size.y);
         area.position.x = clamp(m.x + uiDragOffset.x, dragLimitX.x, dragLimitX.y - area.size.x);
-        *uiState = *uiPreviousState;
+        *_uiState = *_uiPreviousState;
         updateUiButton(area, "", options);
         return true;
     } else {
@@ -497,7 +502,7 @@ bool updateUiTextField(Rect area, ref Str text, Str textBuffer, UiOptions option
         }
     }
     updateUiState(area, false, false, false);
-    return uiState.keyboardClickAction.isPressed;
+    return _uiState.keyboardClickAction.isPressed;
 }
 
 // TODO: Add support for right-to-left text.

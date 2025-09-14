@@ -3,15 +3,15 @@
 // SPDX-License-Identifier: MIT
 // Email: alexandroskapretsos@gmail.com
 // Project: https://github.com/Kapendev/joka
-// Version: v0.0.24
 // ---
 
 /// The `types` module provides basic type definitions and compile-time functions such as type checking.
 module joka.types;
 
-@safe @nogc nothrow:
+@safe nothrow @nogc:
 
-alias Sz      = size_t;         /// The result of sizeof, ...
+alias Sz      = size_t;         /// The result of sizeof.
+alias Pd      = ptrdiff_t;      /// The result of pointer math.
 
 alias Str     = char[];         /// A string slice of chars.
 alias Str16   = wchar[];        /// A string slice of wchars.
@@ -30,7 +30,15 @@ alias ICStr32 = const(dchar)*;  /// A C string of constant dchars.
 alias UnionType = ubyte;
 alias AliasArgs(A...) = A;
 
+enum kilobyte = 1024;
+enum megabyte = 1024 * kilobyte;
+enum gigabyte = 1024 * megabyte;
+enum terabyte = 1024 * gigabyte;
+enum petabyte = 1024 * terabyte;
+enum exabyte  = 1024 * petabyte;
+
 /// A type representing error values.
+// NOTE: Should cantParse be cannotParse? Who cares? We already write Rgba instead of RGBA for example.
 enum Fault : ubyte {
     none,      /// Not an error.
     some,      /// A generic error.
@@ -46,75 +54,137 @@ enum Fault : ubyte {
     cantWrite, /// A write permissions error.
 }
 
-/// Represents a result of a procedure.
-struct Result(T) {
-    static if (isNumberType!T) T value = 0;
-    else T value;             /// The value of the result.
-    Fault fault = Fault.some; /// The error of the result.
+/// A static array.
+// It exists mainly because of weird BetterC stuff.
+struct Array(T, Sz N) {
+    align(T.alignof) ubyte[T.sizeof * N] _data;
 
-    @safe @nogc nothrow:
+    enum length = N;
+    enum capacity = N;
 
-    pragma(inline, true);
-    this(T value) {
-        this.value = value;
-        this.fault = Fault.none;
+    pragma(inline, true) @trusted nothrow @nogc:
+
+    mixin addSliceOps!(Array!(T, N), T);
+
+    this(const(T)[] items...) {
+        if (items.length > N) assert(0, "Too many items.");
+        auto me = this.items;
+        foreach (i; 0 .. N) me[i] = cast(T) items[i];
     }
 
-    pragma(inline, true);
-    this(Fault fault) {
-        this.fault = fault;
+    /// Returns the items of the array.
+    T[] items() {
+        return (cast(T*) _data.ptr)[0 .. N];
     }
 
-    pragma(inline, true);
-    this(T value, Fault fault) {
-        if (fault) {
-            this.fault = fault;
-        } else {
-            this.value = value;
-            this.fault = Fault.none;
-        }
-    }
-
-    /// Returns the result value. Asserts when the result is an error.
-    pragma(inline, true);
-    T get() {
-        if (fault) assert(0, "Fault was detected.");
-        return value;
-    }
-
-    /// Returns the result value. Returns a default value when the result is an error.
-    pragma(inline, true);
-    T getOr(T other) {
-        return fault ? other : value;
-    }
-
-    /// Returns the result value. Returns a default value when the result is an error.
-    pragma(inline, true);
-    T getOr() {
-        return value;
-    }
-
-    /// Returns true when the result is an error.
-    pragma(inline, true);
-    bool isNone() {
-        return fault != 0;
-    }
-
-    /// Returns true when the result is a value.
-    pragma(inline, true);
-    bool isSome() {
-        return fault == 0;
+    /// Returns the pointer of the array.
+    T* ptr() {
+        return cast(T*) _data.ptr;
     }
 }
 
-union UnionValue(A...) {
+/// Represents a result of a function.
+deprecated("Will be replaced with `Maybe`.")
+alias Result(T) = Maybe!T;
+
+/// Represents an optional value.
+struct Maybe(T) {
+    static if (isNumberType!T) {
+        T _data = 0;
+    } else {
+        T _data; /// The value.
+    }
+    Fault _fault = Fault.some; /// The error code.
+
+    pragma(inline, true) @safe nothrow @nogc:
+
+    this(const(T) value) {
+        opAssign(value);
+    }
+
+    this(Fault fault) {
+        opAssign(fault);
+    }
+
+    this(const(T) value, Fault fault) {
+        if (fault) this(fault);
+        else this(value);
+    }
+
+    void opAssign(Maybe!T rhs) {
+        _data = rhs._data;
+        _fault = rhs._fault;
+    }
+
+    @trusted
+    void opAssign(const(T) rhs) {
+        _data = cast(T) rhs;
+        _fault = Fault.none;
+    }
+
+    void opAssign(Fault rhs) {
+        _fault = rhs;
+    }
+
+    static Maybe!T some(T newValue) {
+        return Maybe!T(newValue);
+    }
+
+    static Maybe!T none(Fault newFault = Fault.some) {
+        return Maybe!T(newFault);
+    }
+
+    /// Returns the value without fault checking.
+    ref T xx() {
+        return _data;
+    }
+
+    /// Returns the fault.
+    Fault fault() {
+        return _fault;
+    }
+
+    /// Returns the value and traps the error if it exists.
+    ref T get(ref Fault trap) {
+        trap = _fault;
+        return _data;
+    }
+
+    /// Returns the value, or asserts if an error exists.
+    ref T get() {
+        if (_fault) assert(0, "Fault was detected.");
+        return _data;
+    }
+
+    /// Returns the value. Returns a default value when there is an error.
+    T getOr(T other) {
+        return _fault ? other : _data;
+    }
+
+    /// Returns the value. Returns a default value when there is an error.
+    T getOr() {
+        return _data;
+    }
+
+    /// Returns true when there is an error.
+    bool isNone() {
+        return _fault != 0;
+    }
+
+    /// Returns true when there is a value.
+    bool isSome() {
+        return _fault == 0;
+    }
+}
+
+union UnionData(A...) {
     static assert(A.length != 0, "Arguments must contain at least one element.");
 
     static foreach (i, T; A) {
         static if (i == 0 && isNumberType!T) {
-            mixin("T m", toCleanNumber!i, "= 0;");
+            mixin("T _m", toCleanNumber!i, "= 0;");
         }  else {
-            mixin("T m", toCleanNumber!i, ";");
+            mixin("T _m", toCleanNumber!i, ";");
         }
     }
 
@@ -123,73 +193,74 @@ union UnionValue(A...) {
 }
 
 struct Union(A...) {
-    UnionValue!A value;
-    UnionType type;
+    UnionData!A _data;
+    UnionType _type;
 
     alias Types = A;
     alias Base = A[0];
 
-    @safe @nogc nothrow:
-
-    static foreach (i, T; A) {
-        @trusted
-        this(T value) {
-            auto temp = UnionValue!A();
-            *(cast(T*) &temp) = value;
-            this.value = temp;
-            this.type = i;
-        }
-
-        @trusted
-        void opAssign(T rhs) {
-            auto temp = UnionValue!A();
-            *(cast(T*) &temp) = rhs;
-            value = temp;
-            type = i;
+    @trusted
+    auto call(IStr func, AA...)(AA args) {
+        switch (_type) {
+            static foreach (i, T; A) {
+                static assert(hasMember!(T, func), funcImplementationErrorMessage!(T, func));
+                mixin("case ", i, ": return _data._m", toCleanNumber!i, ".", func, "(args);");
+            }
+            default: assert(0, "WTF!");
         }
     }
 
-    IStr typeName() {
-        static foreach (i, T; A) {
-            if (type == i) {
-                return T.stringof;
-            }
+    pragma(inline, true) @trusted nothrow @nogc:
+
+    static foreach (i, T; A) {
+        this(const(T) value) {
+            opAssign(value);
         }
-        assert(0, "WTF!");
+
+        void opAssign(const(T) rhs) {
+            auto temp = UnionData!A();
+            *(cast(T*) &temp) = cast(T) rhs;
+            _data = temp;
+            _type = i;
+        }
+    }
+
+    UnionType type() {
+        return _type;
+    }
+
+    IStr typeName() {
+        switch (_type) {
+            static foreach (i, T; A) {
+                mixin("case ", i, ": return T.stringof;");
+            }
+            default: assert(0, "WTF!");
+        }
     }
 
     bool isType(T)() {
         static assert(isInAliasArgs!(T, A), "Type `" ~ T.stringof ~ "` is not part of the variant.");
-        return type == findInAliasArgs!(T, A);
+        return _type == findInAliasArgs!(T, A);
     }
 
-    @trusted
-    ref T get(T)() {
+    ref Base base() {
+        return _data._m0;
+    }
+
+    ref T as(T)() {
+        mixin("return _data._m", findInAliasArgs!(T, A), ";");
+    }
+
+    ref T to(T)() {
         if (isType!T) {
-            mixin("return value.m", findInAliasArgs!(T, A), ";");
+            return as!T;
         } else {
             static foreach (i, TT; A) {
-                if (i == type) {
+                if (i == _type) {
                     assert(0, "Value is `" ~ A[i].stringof ~ "` and not `" ~ T.stringof ~ "`.");
                 }
             }
             assert(0, "WTF!");
-        }
-    }
-
-    @trusted
-    ref Base getBase() {
-        return value.m0;
-    }
-
-    @trusted
-    auto call(IStr func, AA...)(AA args) {
-        switch (type) {
-            static foreach (i, T; A) {
-                static assert(hasMember!(T, func), funcImplementationErrorMessage!(T, func));
-                mixin("case ", i, ": return value.m", toCleanNumber!i, ".", func, "(args);");
-            }
-            default: assert(0, "WTF!");
         }
     }
 
@@ -205,7 +276,7 @@ struct Union(A...) {
 }
 
 /// Converts the value to a fault.
-pragma(inline, true);
+pragma(inline, true)
 Fault toFault(bool value, Fault other = Fault.some) {
     return value ? other : Fault.none;
 }
@@ -318,9 +389,7 @@ bool isCharType(T)() {
 
 bool isPrimaryType(T)() {
     return isBoolType!T ||
-        isUnsignedType!T ||
-        isSignedType!T ||
-        isDoubleType!T ||
+        isNumberType!T ||
         isCharType!T;
 }
 
@@ -371,7 +440,7 @@ bool isInAliasArgs(T, A...)() {
 }
 
 IStr funcImplementationErrorMessage(T, IStr func)() {
-    return "Type `" ~ T.stringof ~ "` does not implement the `" ~ func ~ "` function.";
+    return "Type `" ~ T.stringof ~ "` doesn't implement the `" ~ func ~ "` function.";
 }
 
 IStr toCleanNumber(alias i)() {
@@ -387,73 +456,173 @@ IStr toCleanNumber(alias i)() {
     }
 }
 
+pragma(inline, true) @trusted
+Sz offsetOf(T, IStr member)() {
+    static assert(hasMember!(T, member), "Member doesn't exist.");
+    T temp = void;
+    return (cast(ubyte*) mixin("&temp.", member)) - (cast(ubyte*) &temp);
+}
+
 template toStaticArray(alias slice) {
-    auto toStaticArray = cast(typeof(slice[0])[slice.length]) slice;
+    enum toStaticArray = cast(typeof(slice[0])[slice.length]) slice;
+}
+
+mixin template addSliceOps(T, TT) {
+    static assert(hasMember!(T, "items"), "Slice must implement the `" ~ TT.stringof ~ "[] items()` function or have a member called that.");
+
+    pragma(inline, true) @trusted nothrow @nogc {
+        TT[] opSlice(Sz dim)(Sz i, Sz j) {
+            return items[i .. j];
+        }
+
+        TT[] opIndex() {
+            return items[];
+        }
+
+        TT[] opIndex(TT[] slice) {
+            return slice;
+        }
+
+        ref TT opIndex(Sz i) {
+            return items[i];
+        }
+
+        void opIndexAssign(const(TT) rhs, Sz i) {
+            items[i] = cast(TT) rhs;
+        }
+
+        void opIndexOpAssign(const(char)[] op)(const(TT) rhs, Sz i) {
+            mixin("items[i]", op, "= cast(TT) rhs;");
+        }
+
+        Sz opDollar(Sz dim)() {
+            return items.length;
+        }
+    }
 }
 
 mixin template addXyzwOps(T, TT, Sz N, IStr form = "xyzw") {
-    static assert(N >= 2 && N <= 4, "Vector `" ~ T.stringof ~ "`  must have a dimension between 2 and 4.");
+    static assert(N >= 2 && N <= 4, "Vector must have a dimension between 2 and 4.");
+    static assert(N == form.length, "Vector must have a dimension that is equal to the given form length.");
+    static assert(hasMember!(T, "items"), "Vector must implement the `" ~ TT.stringof ~ "[] items()` function or have a member called that.");
 
-    pragma(inline, true)
-    T opUnary(IStr op)() {
-        static if (N == 2) {
-            return T(
-                mixin(op, form[0]),
-                mixin(op, form[1]),
-            );
-        } else static if (N == 3) {
-            return T(
-                mixin(op, form[0]),
-                mixin(op, form[1]),
-                mixin(op, form[2]),
-            );
-        } else static if (N == 4) {
-            return T(
-                mixin(op, form[0]),
-                mixin(op, form[1]),
-                mixin(op, form[2]),
-                mixin(op, form[3]),
-            );
+    pragma(inline, true) @trusted nothrow @nogc {
+        T opUnary(IStr op)() {
+            static if (N == 2) {
+                return T(
+                    mixin(op, form[0]),
+                    mixin(op, form[1]),
+                );
+            } else static if (N == 3) {
+                return T(
+                    mixin(op, form[0]),
+                    mixin(op, form[1]),
+                    mixin(op, form[2]),
+                );
+            } else static if (N == 4) {
+                return T(
+                    mixin(op, form[0]),
+                    mixin(op, form[1]),
+                    mixin(op, form[2]),
+                    mixin(op, form[3]),
+                );
+            }
         }
-    }
 
-    pragma(inline, true)
-    T opBinary(IStr op)(T rhs) {
-        static if (N == 2) {
-            return T(
-                cast(TT) mixin(form[0], op, "rhs.", form[0]),
-                cast(TT) mixin(form[1], op, "rhs.", form[1]),
-            );
-        } else static if (N == 3) {
-            return T(
-                cast(TT) mixin(form[0], op, "rhs.", form[0]),
-                cast(TT) mixin(form[1], op, "rhs.", form[1]),
-                cast(TT) mixin(form[2], op, "rhs.", form[2]),
-            );
-        } else static if (N == 4) {
-            return T(
-                cast(TT) mixin(form[0], op, "rhs.", form[0]),
-                cast(TT) mixin(form[1], op, "rhs.", form[1]),
-                cast(TT) mixin(form[2], op, "rhs.", form[2]),
-                cast(TT) mixin(form[3], op, "rhs.", form[3]),
-            );
+        T opBinary(IStr op)(T rhs) {
+            static if (N == 2) {
+                return T(
+                    cast(TT) mixin(form[0], op, "rhs.", form[0]),
+                    cast(TT) mixin(form[1], op, "rhs.", form[1]),
+                );
+            } else static if (N == 3) {
+                return T(
+                    cast(TT) mixin(form[0], op, "rhs.", form[0]),
+                    cast(TT) mixin(form[1], op, "rhs.", form[1]),
+                    cast(TT) mixin(form[2], op, "rhs.", form[2]),
+                );
+            } else static if (N == 4) {
+                return T(
+                    cast(TT) mixin(form[0], op, "rhs.", form[0]),
+                    cast(TT) mixin(form[1], op, "rhs.", form[1]),
+                    cast(TT) mixin(form[2], op, "rhs.", form[2]),
+                    cast(TT) mixin(form[3], op, "rhs.", form[3]),
+                );
+            }
         }
-    }
 
-    pragma(inline, true)
-    void opOpAssign(IStr op)(T rhs) {
-        static if (N == 2) {
-            mixin(form[0], op, "=rhs.", form[0], ";");
-            mixin(form[1], op, "=rhs.", form[1], ";");
-        } else static if (N == 3) {
-            mixin(form[0], op, "=rhs.", form[0], ";");
-            mixin(form[1], op, "=rhs.", form[1], ";");
-            mixin(form[2], op, "=rhs.", form[2], ";");
-        } else static if (N == 4) {
-            mixin(form[0], op, "=rhs.", form[0], ";");
-            mixin(form[1], op, "=rhs.", form[1], ";");
-            mixin(form[2], op, "=rhs.", form[2], ";");
-            mixin(form[3], op, "=rhs.", form[3], ";");
+        void opOpAssign(IStr op)(T rhs) {
+            static if (N == 2) {
+                mixin(form[0], op, "=rhs.", form[0], ";");
+                mixin(form[1], op, "=rhs.", form[1], ";");
+            } else static if (N == 3) {
+                mixin(form[0], op, "=rhs.", form[0], ";");
+                mixin(form[1], op, "=rhs.", form[1], ";");
+                mixin(form[2], op, "=rhs.", form[2], ";");
+            } else static if (N == 4) {
+                mixin(form[0], op, "=rhs.", form[0], ";");
+                mixin(form[1], op, "=rhs.", form[1], ";");
+                mixin(form[2], op, "=rhs.", form[2], ";");
+                mixin(form[3], op, "=rhs.", form[3], ";");
+            }
+        }
+
+        TT[] opSlice(Sz dim)(Sz i, Sz j) {
+            return items[i .. j];
+        }
+
+        TT[] opIndex() {
+            return items;
+        }
+
+        TT[] opIndex(TT[] slice) {
+            return slice;
+        }
+
+        ref TT opIndex(Sz i) {
+            return items[i];
+        }
+
+        void opIndexAssign(const(TT) rhs, Sz i) {
+            items[i] = cast(TT) rhs;
+        }
+
+        void opIndexOpAssign(IStr op)(const(TT) rhs, Sz i) {
+            mixin("items[i]", op, "= cast(TT) rhs;");
+        }
+
+        Sz opDollar(Sz dim)() {
+            return N;
+        }
+
+        T _swizzleN(G)(const(G)[] args...) {
+            if (args.length != N) assert(0, "Wrong swizzle length.");
+            T result = void;
+            foreach (i, arg; args) result.items[i] = items[arg];
+            return result;
+        }
+
+        T _swizzleC(IStr args...) {
+            if (args.length != N) assert(0, "Wrong swizzle length.");
+            T result = void;
+            foreach (i, arg; args) {
+                auto hasBadArg = true;
+                foreach (j, c; form) if (c == arg) {
+                    result.items[i] = items[j];
+                    hasBadArg = false;
+                    break;
+                }
+                if (hasBadArg) assert(0, "Invalid swizzle component.");
+            }
+            return result;
+        }
+
+        T swizzle(G)(const(G)[] args...) {
+            static if (isCharType!G) {
+                return _swizzleC(args);
+            } else {
+                return _swizzleN(args);
+            }
         }
     }
 }
@@ -461,46 +630,53 @@ mixin template addXyzwOps(T, TT, Sz N, IStr form = "xyzw") {
 // Function test.
 unittest {
     alias Number = Union!(float, double);
+    struct Foo { int x; byte y; byte z; int w; }
 
     assert(toFault(false) == Fault.none);
     assert(toFault(true) == Fault.some);
     assert(toFault(false, Fault.invalid) == Fault.none);
     assert(toFault(true, Fault.invalid) == Fault.invalid);
 
+    assert(toUnion!Number(Number.typeOf!float).as!float == 0);
+    assert(toUnion!Number(Number.typeOf!double).as!double == 0);
+    assert(toUnion!Number(Number.typeNameOf!float).as!float == 0);
+    assert(toUnion!Number(Number.typeNameOf!double).as!double == 0);
+
     assert(isInAliasArgs!(int, AliasArgs!(float)) == false);
     assert(isInAliasArgs!(int, AliasArgs!(float, int)) == true);
+
     assert(isArrayType!(int[3]) == true);
     assert(isArrayType!(typeof(toStaticArray!([1, 2, 3]))));
 
-    assert(toUnion!Number(Number.typeOf!float).get!float() == 0);
-    assert(toUnion!Number(Number.typeOf!double).get!double() == 0);
-    assert(toUnion!Number(Number.typeNameOf!float).get!float() == 0);
-    assert(toUnion!Number(Number.typeNameOf!double).get!double() == 0);
+    assert(offsetOf!(Foo, "x") == 0);
+    assert(offsetOf!(Foo, "y") == 4);
+    assert(offsetOf!(Foo, "z") == 5);
+    assert(offsetOf!(Foo, "w") == 8);
 }
 
-// Result test.
+// Maybe test.
 unittest {
-    assert(Result!int().isNone == true);
-    assert(Result!int().isSome == false);
-    assert(Result!int().getOr() == 0);
-    assert(Result!int(0).isNone == false);
-    assert(Result!int(0).isSome == true);
-    assert(Result!int(0).getOr() == 0);
-    assert(Result!int(69).isNone == false);
-    assert(Result!int(69).isSome == true);
-    assert(Result!int(69).getOr() == 69);
-    assert(Result!int(Fault.none).isNone == false);
-    assert(Result!int(Fault.none).isSome == true);
-    assert(Result!int(Fault.none).getOr() == 0);
-    assert(Result!int(Fault.some).isNone == true);
-    assert(Result!int(Fault.some).isSome == false);
-    assert(Result!int(Fault.some).getOr() == 0);
-    assert(Result!int(69, Fault.none).isNone == false);
-    assert(Result!int(69, Fault.none).isSome == true);
-    assert(Result!int(69, Fault.none).getOr() == 69);
-    assert(Result!int(69, Fault.some).isNone == true);
-    assert(Result!int(69, Fault.some).isSome == false);
-    assert(Result!int(69, Fault.some).getOr() == 0);
+    assert(Maybe!int().isNone == true);
+    assert(Maybe!int().isSome == false);
+    assert(Maybe!int().getOr() == 0);
+    assert(Maybe!int(0).isNone == false);
+    assert(Maybe!int(0).isSome == true);
+    assert(Maybe!int(0).getOr() == 0);
+    assert(Maybe!int(69).isNone == false);
+    assert(Maybe!int(69).isSome == true);
+    assert(Maybe!int(69).getOr() == 69);
+    assert(Maybe!int(Fault.none).isNone == false);
+    assert(Maybe!int(Fault.none).isSome == true);
+    assert(Maybe!int(Fault.none).getOr() == 0);
+    assert(Maybe!int(Fault.some).isNone == true);
+    assert(Maybe!int(Fault.some).isSome == false);
+    assert(Maybe!int(Fault.some).getOr() == 0);
+    assert(Maybe!int(69, Fault.none).isNone == false);
+    assert(Maybe!int(69, Fault.none).isSome == true);
+    assert(Maybe!int(69, Fault.none).getOr() == 69);
+    assert(Maybe!int(69, Fault.some).isNone == true);
+    assert(Maybe!int(69, Fault.some).isSome == false);
+    assert(Maybe!int(69, Fault.some).getOr() == 0);
 }
 
 // Variant test.
@@ -510,15 +686,15 @@ unittest {
     assert(Number().typeName == "float");
     assert(Number().isType!float == true);
     assert(Number().isType!double == false);
-    assert(Number().get!float() == 0);
+    assert(Number().as!float == 0);
     assert(Number(0.0f).typeName == "float");
     assert(Number(0.0f).isType!float == true);
     assert(Number(0.0f).isType!double == false);
-    assert(Number(0.0f).get!float() == 0);
+    assert(Number(0.0f).as!float == 0);
     assert(Number(0.0).isType!float == false);
     assert(Number(0.0).isType!double == true);
     assert(Number(0.0).typeName == "double");
-    assert(Number(0.0).get!double() == 0);
+    assert(Number(0.0).as!double == 0);
     assert(Number.typeOf!float == 0);
     assert(Number.typeOf!double == 1);
     assert(Number.typeNameOf!float == "float");
@@ -526,13 +702,13 @@ unittest {
 
     auto number = Number();
     number = 0.0;
-    assert(number.get!double() == 0);
+    assert(number.as!double == 0);
     number = 0.0f;
-    assert(number.get!float() == 0);
-    number.get!float() += 69.0f;
-    assert(number.get!float() == 69);
+    assert(number.as!float == 0);
+    number.as!float += 69.0f;
+    assert(number.as!float == 69);
 
-    auto numberPtr = &number.get!float();
+    auto numberPtr = &number.as!float();
     *numberPtr *= 10;
-    assert(number.get!float() == 690);
+    assert(number.as!float == 690);
 }

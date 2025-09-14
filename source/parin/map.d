@@ -1,13 +1,12 @@
 // ---
-// Copyright 2024 Alexandros F. G. Kapretsos
+// Copyright 2025 Alexandros F. G. Kapretsos
 // SPDX-License-Identifier: MIT
 // Email: alexandroskapretsos@gmail.com
 // Project: https://github.com/Kapendev/parin
-// Version: v0.0.44
 // ---
 
-// TODO: Think about gaps in an atlas texture.
 // TODO: Update all the doc comments here.
+// NOTE: Tiles can't be scaled. Maybe a bad idea, but who cares. I do the same for 9-slices too and it works fine.
 
 /// The `map` module provides a simple and fast tile map.
 module parin.map;
@@ -15,43 +14,50 @@ module parin.map;
 import joka.ascii;
 import parin.engine;
 
-@safe @nogc nothrow:
+@safe nothrow:
+
+alias TileMapLayer = Grid!short;
+alias TileMapLayers = FixedList!(TileMapLayer, 8);
 
 struct Tile {
-    int widthHeight = 16;
-    Vec2 position;
+    short width;
+    short height;
     short id;
+    byte idOffset;
+    Vec2 position;
 
-    @safe @nogc nothrow:
+    @safe nothrow @nogc:
 
-    this(int widthHeight, short id, Vec2 position = Vec2()) {
-        this.widthHeight = widthHeight;
+    this(short width, short height, short id, Vec2 position = Vec2()) {
+        this.width = width;
+        this.height = height;
         this.id = id;
         this.position = position;
     }
 
-    int width() {
-        return widthHeight;
+    this(short width, short height, short id, float x, float y) {
+        this(width, height, id, Vec2(x, y));
     }
 
-    int height() {
-        return widthHeight;
-    }
-
-    Vec2 size() {
-        return Vec2(widthHeight, widthHeight);
-    }
-
-    Sz row(Sz colCount) {
-        return id / colCount;
-    }
-
-    Sz col(Sz colCount) {
-        return id % colCount;
-    }
-
-    Rect textureArea(Sz colCount) {
-        return Rect(col(colCount) * widthHeight, row(colCount) * widthHeight, widthHeight, widthHeight);
+    pragma(inline, true) {
+        @trusted ref float x() => position.x;
+        @trusted ref float y() => position.y;
+        Sz row(Sz colCount) => (id + idOffset) / colCount;
+        Sz col(Sz colCount) => (id + idOffset) % colCount;
+        Vec2 size() => Vec2(width, height);
+        Rect area() => Rect(position, width, height);
+        Rect textureArea(Sz colCount) => Rect(col(colCount) * width, row(colCount) * height, width, height);
+        bool isEmpty() => !hasId;
+        bool hasId() => id + idOffset >= 0;
+        bool hasSize() => width != 0 && height != 0;
+        bool hasIntersection(Rect otherArea) => area.hasIntersection(otherArea);
+        bool hasIntersection(Tile otherTile) => hasIntersection(otherTile.area);
+        bool hasIntersectionInclusive(Rect otherArea) => area.hasIntersectionInclusive(otherArea);
+        bool hasIntersectionInclusive(Tile otherTile) => hasIntersectionInclusive(otherTile.area);
+        Rect intersection(Rect otherArea) => area.intersection(otherArea);
+        Rect intersection(Tile otherTile) => intersection(otherTile.area);
+        Rect merger(Rect otherArea) => area.merger(otherArea);
+        Rect merger(Tile otherTile) => merger(otherTile.area);
     }
 
     /// Moves the tile to follow the target position at the specified speed.
@@ -65,204 +71,201 @@ struct Tile {
     }
 }
 
-// TODO: Look at it again now with the Grid changes. It works, I know that :)
-// NOTE: Things like changing the grid row count might be interesting.
 struct TileMap {
-    Grid!short data;
-    Sz softRowCount;
-    Sz softColCount;
-    int tileWidth = 16;
-    int tileHeight = 16;
+    TileMapLayers layers;
+    Sz rowCount;
+    Sz colCount;
+    short tileWidth;
+    short tileHeight;
     Vec2 position;
 
-    @safe @nogc nothrow:
+    enum defaultRowColCount = 128;
+    enum extraTileCount = 1;
 
-    this(Sz rowCount, Sz colCount, int tileWidth, int tileHeight) {
+    @safe nothrow:
+
+    this(Sz rowCount, Sz colCount, short tileWidth, short tileHeight, IStr file = __FILE__, Sz line = __LINE__) {
         this.tileWidth = tileWidth;
         this.tileHeight = tileHeight;
-        resizeHard(rowCount, colCount);
+        resizeHard(rowCount, colCount, file, line);
     }
 
-    this(int tileWidth, int tileHeight) {
-        this(defaultGridRowCount, defaultGridColCount, tileWidth, tileHeight);
+    this(short tileWidth, short tileHeight, IStr file = __FILE__, Sz line = __LINE__) {
+        this(defaultRowColCount, defaultRowColCount, tileWidth, tileHeight, file, line);
     }
 
-    ref short opIndex(Sz row, Sz col) {
-        if (!has(row, col)) {
-            assert(0, "Tile `[{}, {}]` does not exist.".fmt(row, col));
+    pragma(inline, true) @nogc {
+        ref short opIndex(Sz row, Sz col, Sz layerId = 0) {
+            if (!has(row, col)) assert(0, "Tile `[{}, {}]` does not exist.".fmt(row, col));
+            return layers[layerId][row, col];
         }
-        return data[row, col];
-    }
 
-    ref short opIndex(IVec2 position) {
-        return opIndex(position.y, position.x);
-    }
-
-    void opIndexAssign(short rhs, Sz row, Sz col) {
-        if (!has(row, col)) {
-            assert(0, "Tile `[{}, {}]` does not exist.".fmt(row, col));
+        ref short opIndex(IVec2 position, Sz layerId = 0) {
+            return opIndex(position.y, position.x, layerId);
         }
-        data[row, col] = rhs;
-    }
 
-    void opIndexAssign(short rhs, IVec2 position) {
-        return opIndexAssign(rhs, position.y, position.x);
-    }
-
-    void opIndexOpAssign(IStr op)(T rhs, Sz row, Sz col) {
-        if (!has(row, col)) {
-            assert(0, "Tile `[{}, {}]` does not exist.".fmt(row, col));
+        void opIndexAssign(short rhs, Sz row, Sz col, Sz layerId = 0) {
+            if (!has(row, col)) assert(0, "Tile `[{}, {}]` does not exist.".fmt(row, col));
+            layers[layerId][row, col] = rhs;
         }
-        mixin("data[colCount * row + col]", op, "= rhs;");
-    }
 
-    void opIndexOpAssign(IStr op)(T rhs, IVec2 position) {
-        return opIndexOpAssign!(op)(rhs, position.y, position.x);
-    }
-
-    Sz opDollar(Sz dim)() {
-        return data.opDollar!dim();
-    }
-
-    Sz length() {
-        return data.length;
-    }
-
-    short* ptr() {
-        return data.ptr;
-    }
-
-    Sz capacity() {
-        return data.capacity;
-    }
-
-    bool isEmpty() {
-        return data.isEmpty;
-    }
-
-    bool has(Sz row, Sz col) {
-        return row < softRowCount && col < softColCount;
-    }
-
-    bool has(IVec2 position) {
-        return has(position.y, position.x);
-    }
-
-    Sz hardRowCount() {
-        return data.rowCount;
-    }
-
-    Sz hardColCount() {
-        return data.colCount;
-    }
-
-    void resizeHard(Sz newHardRowCount, Sz newHardColCount) {
-        data.resizeBlank(newHardRowCount, newHardColCount);
-        data.fill(-1);
-        softRowCount = newHardRowCount;
-        softColCount = newHardColCount;
-    }
-
-    deprecated("Will be replaced with resize.")
-    alias resizeSoft = resize;
-
-    void resize(Sz newSoftRowCount, Sz newSoftColCount) {
-        if (newSoftRowCount > hardRowCount || newSoftColCount > hardColCount) {
-            assert(0, "Soft count must be smaller than hard count.");
+        void opIndexAssign(short rhs, IVec2 position, Sz layerId = 0) {
+            return opIndexAssign(rhs, position.y, position.x, layerId);
         }
-        softRowCount = newSoftRowCount;
-        softColCount = newSoftColCount;
+
+        void opIndexOpAssign(IStr op)(T rhs, Sz row, Sz col, Sz layerId = 0) {
+            if (!has(row, col)) assert(0, "Tile `[{}, {}]` does not exist.".fmt(row, col));
+            mixin("layers[layerId][colCount * row + col]", op, "= rhs;");
+        }
+
+        void opIndexOpAssign(IStr op)(T rhs, IVec2 position, Sz layerId = 0) {
+            return opIndexOpAssign!(op)(rhs, position.y, position.x, layerId);
+        }
+
+        @trusted ref float x() => position.x;
+        @trusted ref float y() => position.y;
+        int width() => cast(int) (colCount * tileWidth);
+        int height() => cast(int) (rowCount * tileHeight);
+        Vec2 size() => Vec2(width, height);
+        Vec2 tileSize() => Vec2(tileWidth, tileHeight);
+        Sz hardRowCount() => layers[0].rowCount;
+        Sz hardColCount() => layers[0].colCount;
+
+        bool isEmpty() => layers.isEmpty;
+        bool has(Sz row, Sz col) => row < rowCount && col < colCount;
+        bool has(IVec2 position) => has(position.y, position.x);
+        bool hasTileSize() => tileWidth != 0 && tileHeight != 0;
+        bool hasSize() => hasTileSize && rowCount != 0 && colCount != 0;
+        Vec2 worldPointAt(int gridX, int gridY) => Vec2(position.x + gridX * tileWidth, position.y + gridY * tileHeight);
+        Vec2 worldPointAt(IVec2 gridPoint) => worldPointAt(gridPoint.x, gridPoint.y);
+        IVec2 gridPointAt(float worldX, float worldY) => IVec2(cast(int) floor((worldX - position.x) / tileWidth), cast(int) floor((worldY - position.y) / tileHeight));
+        IVec2 gridPointAt(Vec2 worldPoint) => gridPointAt(worldPoint.x, worldPoint.y);
     }
 
-    void fillHard(short value) {
-        data.fill(value);
-    }
-
-    deprecated("Will be replaced with fill.")
-    alias fillSoft = fill;
-
-    void fill(short value) {
-        foreach (row; 0 .. softRowCount) {
-            foreach (col; 0 .. softColCount) {
-                data[row, col] = value;
+    Fault parseCsv(IStr csv, short newTileWidth, short newTileHeight, Sz layerId = 0, bool isMinZero = false, IStr file = __FILE__, Sz line = __LINE__) {
+        if (csv.length == 0) return Fault.cantParse;
+        if (layerId >= layers.length) {
+            layers.length = layerId + 1;
+            resizeHard(defaultRowColCount, defaultRowColCount, file, line);
+        }
+        resize(0, 0);
+        resizeTileSize(newTileWidth, newTileHeight);
+        auto view = csv;
+        while (view.length) {
+            rowCount += 1;
+            colCount = 0;
+            if (rowCount > hardRowCount) return Fault.cantParse;
+            auto csvLine = view.skipLine();
+            while (csvLine.length) {
+                colCount += 1;
+                auto tile = csvLine.skipValue(',').toSigned();
+                if (tile.isNone || colCount > hardColCount) return Fault.cantParse;
+                layers[layerId][rowCount - 1, colCount - 1] = cast(short) (tile.xx - isMinZero);
             }
         }
+        return Fault.none;
     }
 
-    void clearHard() {
-        fillHard(-1);
+    Fault parseCsv(IStr csv, Sz layerId = 0, bool isMinZero = false, IStr file = __FILE__, Sz line = __LINE__) {
+        return parseCsv(csv, tileWidth, tileHeight, layerId, isMinZero, file, line);
     }
 
-    deprecated("Will be replaced with clear.")
-    alias clearSoft = clear;
+    // NOTE: Doesn't support inf maps.
+    @trusted
+    Fault parseTmx(IStr tmx, IStr file = __FILE__, Sz line = __LINE__) {
+        auto layerId = 0;
+        auto view = tmx;
+        while (view.length) {
+            auto tmxLine = view.skipLine().trim();
+            auto isMapLine = tmxLine.startsWith("<map");
+            auto isDataStartLine = isMapLine ? false : tmxLine.startsWith("<data");
+            if (isMapLine) {
+                while (tmxLine.length && (tileWidth == 0 || tileHeight == 0)) {
+                    auto word = tmxLine.skipValue(" ").trim();
+                    auto isWidthWord = word.startsWith("tilewidth");
+                    auto isHeightWord = word.startsWith("tileheight");
+                    if (!isWidthWord && !isHeightWord) continue;
+                    auto value = word.split("=")[1][1 .. $ - 1].toSigned(); // NOTE: Removes `"` with `[1 .. $ - 1]`.
+                    if (value.isNone) return Fault.cantParse;
+                    if (isWidthWord) tileWidth = cast(short) value.xx;
+                    if (isHeightWord) tileHeight = cast(short) value.xx;
+                }
+            } else if (isDataStartLine) {
+                Sz csvStart, csvEnd;
+                tmxLine = view.skipLine();
+                csvStart = tmxLine.ptr - tmx.ptr;
+                while (view.length) {
+                    tmxLine = view.skipLine(); // NOTE: No trim because it's already trimmed by Tiled.
+                    if (tmxLine.startsWith("</")) {
+                        csvEnd = tmxLine.ptr - tmx.ptr;
+                        break;
+                    }
+                }
+                if (parseCsv(tmx[csvStart .. csvEnd], layerId, true, file, line)) return Fault.cantParse;
+                layerId += 1;
+            }
+        }
+        return Fault.none;
+    }
+
+    void resizeHard(Sz newHardRowCount, Sz newHardColCount, IStr file = __FILE__, Sz line = __LINE__) {
+        if (isEmpty) layers.length = 1;
+        rowCount = newHardRowCount;
+        colCount = newHardColCount;
+        foreach (ref layer; layers) layer.resizeBlank(newHardRowCount, newHardColCount, file, line);
+    }
+
+    @safe nothrow @nogc:
+
+    void resize(Sz newRowCount, Sz newColCount) {
+        if (newRowCount > hardRowCount || newColCount > hardColCount) assert(0, "Count must be smaller than hard count.");
+        rowCount = newRowCount;
+        colCount = newColCount;
+    }
+
+    void resizeTileSize(short newTileWidth, short newTileHeight) {
+        tileWidth = newTileWidth;
+        tileHeight = newTileHeight;
+    }
 
     void clear() {
-        fill(-1);
+        foreach (ref layer; layers) layer.fill(-1);
     }
 
-    void free() {
-        data.free();
+    void clear(Sz layerId) {
+        layers[layerId].fill(-1);
     }
 
-    int width() {
-        return cast(int) (softColCount * tileWidth);
+    void free(IStr file = __FILE__, Sz line = __LINE__) {
+        layers.freeOnlyItems(file, line);
     }
 
-    int height() {
-        return cast(int) (softRowCount * tileHeight);
+    void ignoreLeak() {
+        foreach (ref layer; layers.data.items) layer.ignoreLeak();
     }
 
-    /// Returns the size of the tile map.
-    Vec2 size() {
-        return Vec2(width, height);
-    }
-
-    /// Returns the tile size of the tile map.
-    Vec2 tileSize() {
-        return Vec2(tileWidth, tileHeight);
-    }
-
-    /// Moves the tile map to follow the target position at the specified speed.
     void followPosition(Vec2 target, float speed) {
         position = position.moveTo(target, Vec2(speed));
     }
 
-    /// Moves the tile map to follow the target position with gradual slowdown.
     void followPositionWithSlowdown(Vec2 target, float slowdown) {
         position = position.moveToWithSlowdown(target, Vec2(deltaTime), slowdown);
     }
 
-    /// Returns the top left world position of a grid position.
-    Vec2 toWorldPoint(Sz row, Sz col, DrawOptions options = DrawOptions()) {
-        auto targetTileWidth = cast(int) (tileWidth * options.scale.x);
-        auto targetTileHeight = cast(int) (tileHeight * options.scale.y);
-        auto temp = Rect(
-            position.x + col * targetTileWidth,
-            position.y + row * targetTileHeight,
-            targetTileWidth,
-            targetTileHeight,
-        );
-        return temp.area(options.hook).position;
-    }
-
-    /// Returns the top left world position of a grid position.
-    Vec2 toWorldPoint(IVec2 gridPosition, DrawOptions options = DrawOptions()) {
-        return toWorldPoint(gridPosition.y, gridPosition.x, options);
-    }
-
-    auto gridPoints(Vec2 topLeftWorldPoint, Vec2 bottomRightWorldPoint, DrawOptions options = DrawOptions()) {
+    auto gridPoints(Vec2 topLeftViewPoint, Vec2 bottomRightViewPoint) {
+        alias T = ushort;
         static struct Range {
-            Sz colCount;
-            IVec2 first;
-            IVec2 last;
-            IVec2 position;
+            T colCount;
+            GVec2!T first;
+            GVec2!T last;
+            GVec2!T position;
 
             bool empty() {
                 return position.x > last.x || position.y > last.y;
             }
 
             IVec2 front() {
-                return position;
+                return IVec2(position.x, position.y);
             }
 
             void popFront() {
@@ -274,131 +277,168 @@ struct TileMap {
             }
         }
 
-        if (softRowCount == 0 || softColCount == 0) return Range();
-        auto targetTileWidth = cast(int) (tileWidth * options.scale.x);
-        auto targetTileHeight = cast(int) (tileHeight * options.scale.y);
-        auto extraTileCount = options.hook == Hook.topLeft ? 1 : 2;
-        auto firstGridPoint = IVec2(
-            cast(int) clamp((topLeftWorldPoint.x - position.x) / targetTileWidth, 0, softColCount - 1),
-            cast(int) clamp((topLeftWorldPoint.y - position.y) / targetTileHeight, 0, softRowCount - 1),
+        if (!hasSize) return Range();
+        auto firstGridPoint = GVec2!T(
+            cast(T) clamp((topLeftViewPoint.x - position.x) / tileWidth, 0, colCount - 1),
+            cast(T) clamp((topLeftViewPoint.y - position.y) / tileHeight, 0, rowCount - 1),
         );
-        auto lastGridPoint = IVec2(
-            cast(int) clamp((bottomRightWorldPoint.x - position.x) / targetTileWidth + extraTileCount, 0, softColCount - 1),
-            cast(int) clamp((bottomRightWorldPoint.y - position.y) / targetTileHeight + extraTileCount, 0, softRowCount - 1),
+        auto lastGridPoint = GVec2!T(
+            cast(T) clamp((bottomRightViewPoint.x - position.x) / tileWidth + extraTileCount, 0, colCount - 1),
+            cast(T) clamp((bottomRightViewPoint.y - position.y) / tileHeight + extraTileCount, 0, rowCount - 1),
         );
         return Range(
-            softColCount,
+            cast(T) colCount,
             firstGridPoint,
             lastGridPoint,
             firstGridPoint,
         );
     }
 
-    auto gridPoints(Rect worldArea, DrawOptions options = DrawOptions()) {
-        return gridPoints(worldArea.topLeftPoint, worldArea.bottomRightPoint, options);
+    auto gridPoints(Rect viewArea) {
+        return gridPoints(viewArea.topLeftPoint, viewArea.bottomRightPoint);
     }
 
-    Fault parse(IStr csv, int newTileWidth, int newTileHeight) {
-        resize(0, 0);
-        if (csv.length == 0) return Fault.invalid;
-        if (data.isEmpty) data.resizeBlank(defaultGridRowCount, defaultGridColCount);
-        tileWidth = newTileWidth;
-        tileHeight = newTileHeight;
-        while (csv.length != 0) {
-            softRowCount += 1;
-            softColCount = 0;
-            if (softRowCount > data.rowCount) return Fault.invalid;
-            auto line = csv.skipLine();
-            while (line.length != 0) {
-                softColCount += 1;
-                if (softColCount > data.colCount) return Fault.invalid;
-                auto tile = line.skipValue(',').toSigned();
-                if (tile.isNone) {
-                    resize(0, 0);
-                    return Fault.invalid;
+    auto gridPoints(Camera camera) {
+        return gridPoints(camera.area);
+    }
+
+    auto tiles(Vec2 topLeftViewPoint, Vec2 bottomRightViewPoint, Sz layerId = 0) {
+        alias T = ushort;
+        static struct Range {
+            T colCount;
+            GVec2!T first;
+            GVec2!T last;
+            GVec2!T position;
+            short width;
+            short height;
+            TileMapLayer* layer;
+
+            bool empty() {
+                return position.x > last.x || position.y > last.y;
+            }
+
+            Tile front() {
+                return Tile(width, height, (*layer)[position.y, position.x], Vec2(position.x * width, position.y * height));
+            }
+
+            void popFront() {
+                position.x += 1;
+                if (position.x >= colCount) {
+                    position.x = first.x;
+                    position.y += 1;
                 }
-                data[softRowCount - 1, softColCount - 1] = cast(short) tile.value;
             }
         }
-        return Fault.none;
+
+        if (!hasSize) return Range();
+        auto firstGridPoint = GVec2!T(
+            cast(T) clamp((topLeftViewPoint.x - position.x) / tileWidth, 0, colCount - 1),
+            cast(T) clamp((topLeftViewPoint.y - position.y) / tileHeight, 0, rowCount - 1),
+        );
+        auto lastGridPoint = GVec2!T(
+            cast(T) clamp((bottomRightViewPoint.x - position.x) / tileWidth + extraTileCount, 0, colCount - 1),
+            cast(T) clamp((bottomRightViewPoint.y - position.y) / tileHeight + extraTileCount, 0, rowCount - 1),
+        );
+        return Range(
+            cast(T) colCount,
+            firstGridPoint,
+            lastGridPoint,
+            firstGridPoint,
+            tileWidth,
+            tileHeight,
+            &layers[layerId],
+        );
     }
 
-    Fault parse(IStr csv) {
-        return parse(csv, tileWidth, tileHeight);
+    auto tiles(Rect viewArea, Sz layerId = 0) {
+        return tiles(viewArea.topLeftPoint, viewArea.bottomRightPoint, layerId);
+    }
+
+    auto tiles(Camera camera, Sz layerId = 0) {
+        return tiles(camera.area, layerId);
     }
 }
 
-Fault saveTileMap(IStr path, TileMap map) {
-    auto csv = prepareTempText();
-    foreach (row; 0 .. map.softRowCount) {
-        foreach (col; 0 .. map.softColCount) {
-            csv.append(map[row, col].toStr());
-            if (col != map.softColCount - 1) csv.append(',');
-        }
-        csv.append('\n');
-    }
-    return saveText(path, csv.items);
-}
-
-void drawTileX(Texture texture, Tile tile, DrawOptions options = DrawOptions()) {
-    if (tile.id < 0 || tile.width <= 0 || tile.height <= 0) return;
-    if (texture.isEmpty) {
-        if (isEmptyTextureVisible) {
-            auto rect = Rect(tile.position, tile.size * options.scale).area(options.hook);
-            drawRect(rect, defaultEngineEmptyTextureColor);
-            drawHollowRect(rect, 1, black);
-        }
-        return;
-    }
-    drawTextureAreaX(texture, tile.textureArea(texture.width / tile.width), tile.position, options);
-}
-
-void drawTile(TextureId texture, Tile tile, DrawOptions options = DrawOptions()) {
-    drawTileX(texture.getOr(), tile, options);
-}
-
-void drawTileMapX(Texture texture, TileMap map, Camera camera, DrawOptions options = DrawOptions()) {
-    if (map.softRowCount == 0 || map.softColCount == 0 || map.tileWidth <= 0 || map.tileHeight <= 0) return;
-    if (texture.isEmpty) {
-        if (isEmptyTextureVisible) {
-            auto rect = Rect(map.position, map.size * options.scale).area(options.hook);
-            drawRect(rect, defaultEngineEmptyTextureColor);
-            drawHollowRect(rect, 1, black);
-        }
-        return;
-    }
-
-    auto topLeftWorldPoint = camera.topLeftPoint;
-    auto bottomRightWorldPoint = camera.bottomRightPoint;
-    auto textureColCount = texture.width / map.tileWidth;
-    auto targetTileWidth = cast(int) (map.tileWidth * options.scale.x);
-    auto targetTileHeight = cast(int) (map.tileHeight * options.scale.y);
-    auto extraTileCount = options.hook == Hook.topLeft ? 1 : 2;
-    auto colRow1 = IVec2(
-        cast(int) clamp((topLeftWorldPoint.x - map.position.x) / targetTileWidth, 0, map.softColCount - 1),
-        cast(int) clamp((topLeftWorldPoint.y - map.position.y) / targetTileHeight, 0, map.softRowCount - 1),
-    );
-    auto colRow2 = IVec2(
-        cast(int) clamp((bottomRightWorldPoint.x - map.position.x) / targetTileWidth + extraTileCount, 0, map.softColCount - 1),
-        cast(int) clamp((bottomRightWorldPoint.y - map.position.y) / targetTileHeight + extraTileCount, 0, map.softRowCount - 1),
-    );
-    auto textureArea = Rect(map.tileWidth, map.tileHeight);
-    foreach (row; colRow1.y .. colRow2.y + 1) {
-        foreach (col; colRow1.x .. colRow2.x + 1) {
-            auto id = map[row, col];
-            if (id < 0) continue;
-            textureArea.position.x = (id % textureColCount) * map.tileWidth;
-            textureArea.position.y = (id / textureColCount) * map.tileHeight;
-            drawTextureAreaX(
-                texture,
-                textureArea,
-                map.position + Vec2(col * targetTileWidth, row * targetTileHeight),
-                options,
-            );
+@nogc {
+    void drawTile(Texture texture, Tile tile, DrawOptions options = DrawOptions()) {
+        version (ParinSkipDrawChecks) {
+            drawTextureArea(texture, tile.textureArea(texture.width / tile.width), tile.position, options);
+        } else {
+            if (!tile.hasId || !tile.hasSize) return;
+            drawTextureArea(texture, texture.width ? tile.textureArea(texture.width / tile.width) : Rect(tile.size), tile.position, options);
         }
     }
-}
 
-void drawTileMap(TextureId texture, TileMap map, Camera camera, DrawOptions options = DrawOptions()) {
-    drawTileMapX(texture.getOr(), map, camera, options);
+    void drawTile(TextureId texture, Tile tile, DrawOptions options = DrawOptions()) {
+        drawTile(texture.getOr(), tile, options);
+    }
+
+    void drawTile(Tile tile, DrawOptions options = DrawOptions()) {
+        drawTile(defaultTexture.getOr(), tile, options);
+    }
+
+    void drawTileMap(Texture texture, ref TileMap map, Rect viewArea = Rect(), DrawOptions options = DrawOptions()) {
+        version (ParinSkipDrawChecks) {
+        } else {
+            if (texture.isEmpty) {
+                if (isEmptyTextureVisible) {
+                    auto rect = Rect(map.position, map.size);
+                    drawRect(rect, defaultEngineEmptyTextureColor);
+                    drawHollowRect(rect, 1, black);
+                }
+                return;
+            }
+            if (!map.hasSize) return;
+        }
+
+        auto hasAreaSize = viewArea.hasSize;
+        auto topLeftPoint = viewArea.topLeftPoint;
+        auto bottomRightPoint = viewArea.bottomRightPoint;
+        auto textureColCount = texture.width / map.tileWidth;
+        auto textureArea = Rect(map.tileWidth, map.tileHeight);
+        auto colRow1 = !hasAreaSize ? IVec2() : IVec2(
+            cast(int) clamp((topLeftPoint.x - map.position.x) / map.tileWidth, 0, map.colCount - 1),
+            cast(int) clamp((topLeftPoint.y - map.position.y) / map.tileHeight, 0, map.rowCount - 1),
+        );
+        auto colRow2 = !hasAreaSize ? IVec2(cast(int) map.colCount - 1, cast(int) map.rowCount - 1) : IVec2(
+            cast(int) clamp((bottomRightPoint.x - map.position.x) / map.tileWidth + map.extraTileCount, 0, map.colCount - 1),
+            cast(int) clamp((bottomRightPoint.y - map.position.y) / map.tileHeight + map.extraTileCount, 0, map.rowCount - 1),
+        );
+        foreach (layer; map.layers) {
+            foreach (row; colRow1.y .. colRow2.y + 1) {
+                foreach (col; colRow1.x .. colRow2.x + 1) {
+                    auto id = layer[row, col];
+                    if (id < 0) continue;
+                    textureArea.position.x = (id % textureColCount) * map.tileWidth;
+                    textureArea.position.y = (id / textureColCount) * map.tileHeight;
+                    drawTextureArea(
+                        texture,
+                        textureArea,
+                        map.position + Vec2(col * map.tileWidth, row * map.tileHeight),
+                        options,
+                    );
+                }
+            }
+        }
+    }
+
+    void drawTileMap(TextureId texture, ref TileMap map, Rect viewArea = Rect(), DrawOptions options = DrawOptions()) {
+        drawTileMap(texture.getOr(), map, viewArea, options);
+    }
+
+    void drawTileMap(ref TileMap map, Rect viewArea = Rect(), DrawOptions options = DrawOptions()) {
+        drawTileMap(defaultTexture.getOr(), map, viewArea, options);
+    }
+
+    void drawTileMap(Texture texture, ref TileMap map, Camera camera, DrawOptions options = DrawOptions()) {
+        drawTileMap(texture, map, camera.area, options);
+    }
+
+    void drawTileMap(TextureId texture, ref TileMap map, Camera camera, DrawOptions options = DrawOptions()) {
+        drawTileMap(texture.getOr(), map, camera.area, options);
+    }
+
+    void drawTileMap(ref TileMap map, Camera camera, DrawOptions options = DrawOptions()) {
+        drawTileMap(defaultTexture.getOr(), map, camera.area, options);
+    }
 }

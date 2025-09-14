@@ -3,12 +3,11 @@
 // SPDX-License-Identifier: MIT
 // Email: alexandroskapretsos@gmail.com
 // Project: https://github.com/Kapendev/joka
-// Version: v0.0.24
 // ---
 
 module joka.stdc.math;
 
-@nogc nothrow extern(C):
+extern(C) nothrow @nogc pure:
 
 int abs(int x);
 long labs(long x);

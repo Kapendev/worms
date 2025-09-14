@@ -3,18 +3,19 @@
 // SPDX-License-Identifier: MIT
 // Email: alexandroskapretsos@gmail.com
 // Project: https://github.com/Kapendev/joka
-// Version: v0.0.24
 // ---
 
 /// The `math` module provides mathematical data structures and functions.
 module joka.math;
 
+import joka.ascii;
 import joka.types;
 import stdc = joka.stdc.math;
 
-@safe @nogc nothrow:
+// I don't care about `pure`, but I'm a nice person.
+@safe nothrow @nogc pure:
 
-enum epsilon = 0.000100;                              /// The value of epsilon.
+enum epsilon = 0.0001;                                /// The value of epsilon.
 enum euler   = 2.71828182845904523536028747135266249; /// The value of Euler's number.
 enum log2e   = 1.44269504088896340735992468100189214; /// The value of log2(e).
 enum log10e  = 0.43429448190325182765112891891660508; /// The value of log10(e).
@@ -50,7 +51,7 @@ enum gray3   = Rgba(159, 159, 159); /// Gray 333.
 enum gray4   = Rgba(223, 223, 223); /// Gray 4444.
 enum gray    = gray2;               /// Gray gray.
 
-alias Color = Rgba;
+alias Color = Rgba;         /// The common color type.
 
 alias BVec2 = GVec2!byte;   /// A 2D vector using bytes.
 alias IVec2 = GVec2!int;    /// A 2D vector using ints.
@@ -75,6 +76,71 @@ alias IRect = GRect!int;    /// A 2D rectangle using ints.
 alias URect = GRect!uint;   /// A 2D rectangle using uints.
 alias Rect = GRect!float;   /// A 2D rectangle using floats.
 alias DRect = GRect!double; /// A 2D rectangle using doubles.
+
+alias BCirc = GCirc!byte;   /// A 2D circle using bytes.
+alias ICirc = GCirc!int;    /// A 2D circle using ints.
+alias UCirc = GCirc!uint;   /// A 2D circle using uints.
+alias Circ = GCirc!float;   /// A 2D circle using floats.
+alias DCirc = GCirc!double; /// A 2D circle using doubles.
+
+alias BLine = GLine!byte;   /// A 2D line using bytes.
+alias ILine = GLine!int;    /// A 2D line using ints.
+alias ULine = GLine!uint;   /// A 2D line using uints.
+alias Line = GLine!float;   /// A 2D line using floats.
+alias DLine = GLine!double; /// A 2D line using doubles.
+
+alias Tween = GTween!float;   /// A tween using floats.
+alias Tween2 = GTween!Vec2;   /// A tween using 2D vectors.
+alias Tween3 = GTween!Vec3;   /// A tween using 3D vectors.
+alias Tween4 = GTween!Vec4;   /// A tween using 4D vectors.
+alias DTween = GTween!double; /// A tween using doubles.
+alias DTween2 = GTween!DVec2; /// A tween using 2D vectors with doubles.
+alias DTween3 = GTween!DVec3; /// A tween using 3D vectors with doubles.
+alias DTween4 = GTween!DVec4; /// A tween using 4D vectors with doubles.
+
+alias EaseFunc = float function(float x); /// A function used for easing.
+
+/// A type representing easing functions.
+enum Ease : ubyte {
+    linear,
+    inSine,
+    outSine,
+    inOutSine,
+    inCubic,
+    outCubic,
+    inOutCubic,
+    inQuint,
+    outQuint,
+    inOutQuint,
+    inCirc,
+    outCirc,
+    inOutCirc,
+    inElastic,
+    outElastic,
+    inOutElastic,
+    inQuad,
+    outQuad,
+    inOutQuad,
+    inQuart,
+    outQuart,
+    inOutQuart,
+    inExpo,
+    outExpo,
+    inOutExpo,
+    inBack,
+    outBack,
+    inOutBack,
+    inBounce,
+    outBounce,
+    inOutBounce,
+}
+
+/// A type that describes how a tween should update.
+enum TweenMode : ubyte {
+    bomb, /// It stops updating when it reaches the beginning or end of the animation.
+    loop, /// It returns to the beginning or end of the animation when it reaches the beginning or end of the animation.
+    yoyo, /// It reverses the given delta time when it reaches the beginning or end of the animation.
+}
 
 /// A type representing relative points.
 enum Hook : ubyte {
@@ -101,7 +167,17 @@ struct Rgba {
     enum zero = Rgba(0, 0, 0, 0); /// The zero value of the color.
     enum one = Rgba(1, 1, 1, 1);  /// The one value of the color.
 
-    @safe @nogc nothrow:
+    @safe nothrow @nogc:
+
+    IStr toStr() {
+        return "({} {} {} {})".fmt(r, g, b, a);
+    }
+
+    IStr toString() {
+        return toStr();
+    }
+
+    @safe nothrow @nogc pure:
 
     mixin addXyzwOps!(Rgba, ubyte, length, form);
 
@@ -116,6 +192,11 @@ struct Rgba {
     pragma(inline, true)
     this(ubyte r) {
         this(r, r, r, 255);
+    }
+
+    pragma(inline, true) @trusted
+    ubyte[] items() {
+        return (cast(ubyte*) &this)[0 .. length];
     }
 
     pragma(inline, true)
@@ -152,155 +233,143 @@ struct GVec2(T) {
         alias Float = float;
     }
 
-    @safe @nogc nothrow:
+    @safe nothrow @nogc:
+
+    IStr toStr() {
+        return "({} {})".fmt(x, y);
+    }
+
+    IStr toString() {
+        return toStr();
+    }
+
+    @safe nothrow @nogc pure:
 
     mixin addXyzwOps!(GVec2!T, T, length, form);
 
-    pragma(inline, true)
-    this(T x, T y) {
-        this.x = x;
-        this.y = y;
-    }
+    pragma(inline, true) {
+        this(T x, T y) {
+            this.x = x;
+            this.y = y;
+        }
 
-    pragma(inline, true)
-    this(T x) {
-        this(x, x);
-    }
+        this(T x) {
+            this(x, x);
+        }
 
-    pragma(inline, true)
-    bool isZero() {
-        return x == 0 && y == 0;
-    }
+        @trusted T[] items() => (cast(T*) &this)[0 .. length];
+        bool isZero() => x == 0 && y == 0;
+        bool isOne() => x == 1 && y == 1;
+        T chop() => x;
+        GVec2!T abs() => GVec2!T(x.abs, y.abs);
 
-    pragma(inline, true)
-    bool isOne() {
-        return x == 1 && y == 1;
-    }
-
-    pragma(inline, true)
-    GVec2!T abs() {
-        return GVec2!T(x.abs, y.abs);
-    }
-
-    pragma(inline, true)
-    GVec2!T floor() {
-        static if (isIntegerType!T) {
-            return this;
-        } else {
-            static if (is64) {
-                return GVec2!T(x.floor64, y.floor64);
+        GVec2!T floor() {
+            static if (isIntegerType!T) {
+                return this;
             } else {
-                return GVec2!T(x.floor, y.floor);
+                static if (is64) {
+                    return GVec2!T(x.floor64, y.floor64);
+                } else {
+                    return GVec2!T(x.floor, y.floor);
+                }
             }
         }
-    }
 
-    pragma(inline, true)
-    GVec2!T ceil() {
-        static if (isIntegerType!T) {
-            return this;
-        } else {
-            static if (is64) {
-                return GVec2!T(x.ceil64, y.ceil64);
+        GVec2!T ceil() {
+            static if (isIntegerType!T) {
+                return this;
             } else {
-                return GVec2!T(x.ceil, y.ceil);
+                static if (is64) {
+                    return GVec2!T(x.ceil64, y.ceil64);
+                } else {
+                    return GVec2!T(x.ceil, y.ceil);
+                }
             }
         }
-    }
 
-    pragma(inline, true)
-    GVec2!T round() {
-        static if (isIntegerType!T) {
-            return this;
-        } else {
-            static if (is64) {
-                return GVec2!T(x.round64, y.round64);
+        GVec2!T round() {
+            static if (isIntegerType!T) {
+                return this;
             } else {
-                return GVec2!T(x.round, y.round);
+                static if (is64) {
+                    return GVec2!T(x.round64, y.round64);
+                } else {
+                    return GVec2!T(x.round, y.round);
+                }
             }
         }
-    }
 
-    pragma(inline, true)
-    GVec2!Float sqrt() {
-        static if (is64) {
-            return GVec2!Float(x.sqrt64, y.sqrt64);
-        } else {
-            return GVec2!Float(x.sqrt, y.sqrt);
+        GVec2!Float sqrt() {
+            static if (is64) {
+                return GVec2!Float(x.sqrt64, y.sqrt64);
+            } else {
+                return GVec2!Float(x.sqrt, y.sqrt);
+            }
         }
-    }
 
-    pragma(inline, true)
-    GVec2!Float sin() {
-        static if (is64) {
-            return GVec2!Float(x.sin64, y.sin64);
-        } else {
-            return GVec2!Float(x.sin, y.sin);
+        GVec2!Float sin() {
+            static if (is64) {
+                return GVec2!Float(x.sin64, y.sin64);
+            } else {
+                return GVec2!Float(x.sin, y.sin);
+            }
         }
-    }
 
-    pragma(inline, true)
-    GVec2!Float cos() {
-        static if (is64) {
-            return GVec2!Float(x.cos64, y.cos64);
-        } else {
-            return GVec2!Float(x.cos, y.cos);
+        GVec2!Float cos() {
+            static if (is64) {
+                return GVec2!Float(x.cos64, y.cos64);
+            } else {
+                return GVec2!Float(x.cos, y.cos);
+            }
         }
-    }
 
-    pragma(inline, true)
-    GVec2!Float tan() {
-        static if (is64) {
-            return GVec2!Float(x.tan64, y.tan64);
-        } else {
-            return GVec2!Float(x.tan, y.tan);
+        GVec2!Float tan() {
+            static if (is64) {
+                return GVec2!Float(x.tan64, y.tan64);
+            } else {
+                return GVec2!Float(x.tan, y.tan);
+            }
         }
-    }
 
-    pragma(inline, true)
-    GVec2!Float asin() {
-        static if (is64) {
-            return GVec2!Float(x.asin64, y.asin64);
-        } else {
-            return GVec2!Float(x.asin, y.asin);
+        GVec2!Float asin() {
+            static if (is64) {
+                return GVec2!Float(x.asin64, y.asin64);
+            } else {
+                return GVec2!Float(x.asin, y.asin);
+            }
         }
-    }
 
-    pragma(inline, true)
-    GVec2!Float acos() {
-        static if (is64) {
-            return GVec2!Float(x.acos64, y.acos64);
-        } else {
-            return GVec2!Float(x.acos, y.acos);
+        GVec2!Float acos() {
+            static if (is64) {
+                return GVec2!Float(x.acos64, y.acos64);
+            } else {
+                return GVec2!Float(x.acos, y.acos);
+            }
         }
-    }
 
-    pragma(inline, true)
-    GVec2!Float atan() {
-        static if (is64) {
-            return GVec2!Float(x.atan64, y.atan64);
-        } else {
-            return GVec2!Float(x.atan, y.atan);
+        GVec2!Float atan() {
+            static if (is64) {
+                return GVec2!Float(x.atan64, y.atan64);
+            } else {
+                return GVec2!Float(x.atan, y.atan);
+            }
         }
-    }
 
-    pragma(inline, true)
-    Float angle() {
-        return atan2(y, x);
-    }
-
-    pragma(inline, true)
-    Float magnitude() {
-        static if (is64) {
-            return (x * x + y * y).sqrt64;
-        } else {
-            return (x * x + y * y).sqrt;
+        Float angle() {
+            return atan2(y, x);
         }
-    }
 
-    pragma(inline, true)
-    Float magnitudeSquared() {
-        return x * x + y * y;
+        Float magnitude() {
+            static if (is64) {
+                return (x * x + y * y).sqrt64;
+            } else {
+                return (x * x + y * y).sqrt;
+            }
+        }
+
+        Float magnitudeSquared() {
+            return x * x + y * y;
+        }
     }
 
     GVec2!Float normalize() {
@@ -345,156 +414,144 @@ struct GVec3(T) {
         alias Float = float;
     }
 
-    @safe @nogc nothrow:
+    @safe nothrow @nogc:
+
+    IStr toStr() {
+        return "({} {} {})".fmt(x, y, z);
+    }
+
+    IStr toString() {
+        return toStr();
+    }
+
+    @safe nothrow @nogc pure:
 
     mixin addXyzwOps!(GVec3!T, T, length, form);
 
-    pragma(inline, true)
-    this(T x, T y, T z) {
-        this.x = x;
-        this.y = y;
-        this.z = z;
-    }
+    pragma(inline, true) {
+        this(T x, T y, T z) {
+            this.x = x;
+            this.y = y;
+            this.z = z;
+        }
 
-    pragma(inline, true)
-    this(T x) {
-        this(x, x, x);
-    }
+        this(T x) {
+            this(x, x, x);
+        }
 
-    pragma(inline, true)
-    this(GVec2!T xy, T z) {
-        this(xy.x, xy.y, z);
-    }
+        this(GVec2!T xy, T z) {
+            this(xy.x, xy.y, z);
+        }
 
-    pragma(inline, true)
-    bool isZero() {
-        return x == 0 && y == 0 && z == 0;
-    }
+        @trusted T[] items() => (cast(T*) &this)[0 .. length];
+        bool isZero() => x == 0 && y == 0 && z == 0;
+        bool isOne() => x == 1 && y == 1 && z == 1;
+        GVec2!T chop() => GVec2!T(x, y);
+        GVec3!T abs() => GVec3!T(x.abs, y.abs, z.abs);
 
-    pragma(inline, true)
-    bool isOne() {
-        return x == 1 && y == 1 && z == 1;
-    }
-
-    pragma(inline, true)
-    GVec3!T abs() {
-        return GVec3!T(x.abs, y.abs, z.abs);
-    }
-
-    pragma(inline, true)
-    GVec3!T floor() {
-        static if (isIntegerType!T) {
-            return this;
-        } else {
-            static if (is64) {
-                return GVec3!T(x.floor64, y.floor64, z.floor64);
+        GVec3!T floor() {
+            static if (isIntegerType!T) {
+                return this;
             } else {
-                return GVec3!T(x.floor, y.floor, z.floor);
+                static if (is64) {
+                    return GVec3!T(x.floor64, y.floor64, z.floor64);
+                } else {
+                    return GVec3!T(x.floor, y.floor, z.floor);
+                }
             }
         }
-    }
 
-    pragma(inline, true)
-    GVec3!T ceil() {
-        static if (isIntegerType!T) {
-            return this;
-        } else {
-            static if (is64) {
-                return GVec3!T(x.ceil64, y.ceil64, z.ceil64);
+        GVec3!T ceil() {
+            static if (isIntegerType!T) {
+                return this;
             } else {
-                return GVec3!T(x.ceil, y.ceil, z.ceil);
+                static if (is64) {
+                    return GVec3!T(x.ceil64, y.ceil64, z.ceil64);
+                } else {
+                    return GVec3!T(x.ceil, y.ceil, z.ceil);
+                }
             }
         }
-    }
 
-    pragma(inline, true)
-    GVec3!T round() {
-        static if (isIntegerType!T) {
-            return this;
-        } else {
-            static if (is64) {
-                return GVec3!T(x.round64, y.round64, z.round64);
+        GVec3!T round() {
+            static if (isIntegerType!T) {
+                return this;
             } else {
-                return GVec3!T(x.round, y.round, z.round);
+                static if (is64) {
+                    return GVec3!T(x.round64, y.round64, z.round64);
+                } else {
+                    return GVec3!T(x.round, y.round, z.round);
+                }
             }
         }
-    }
 
-    pragma(inline, true)
-    GVec3!Float sqrt() {
-        static if (is64) {
-            return GVec3!Float(x.sqrt64, y.sqrt64, z.sqrt64);
-        } else {
-            return GVec3!Float(x.sqrt, y.sqrt, z.sqrt);
+        GVec3!Float sqrt() {
+            static if (is64) {
+                return GVec3!Float(x.sqrt64, y.sqrt64, z.sqrt64);
+            } else {
+                return GVec3!Float(x.sqrt, y.sqrt, z.sqrt);
+            }
         }
-    }
 
-    pragma(inline, true)
-    GVec3!Float sin() {
-        static if (is64) {
-            return GVec3!Float(x.sin64, y.sin64, z.sin64);
-        } else {
-            return GVec3!Float(x.sin, y.sin, z.sin);
+        GVec3!Float sin() {
+            static if (is64) {
+                return GVec3!Float(x.sin64, y.sin64, z.sin64);
+            } else {
+                return GVec3!Float(x.sin, y.sin, z.sin);
+            }
         }
-    }
 
-    pragma(inline, true)
-    GVec3!Float cos() {
-        static if (is64) {
-            return GVec3!Float(x.cos64, y.cos64, z.cos64);
-        } else {
-            return GVec3!Float(x.cos, y.cos, z.cos);
+        GVec3!Float cos() {
+            static if (is64) {
+                return GVec3!Float(x.cos64, y.cos64, z.cos64);
+            } else {
+                return GVec3!Float(x.cos, y.cos, z.cos);
+            }
         }
-    }
 
-    pragma(inline, true)
-    GVec3!Float tan() {
-        static if (is64) {
-            return GVec3!Float(x.tan64, y.tan64, z.tan64);
-        } else {
-            return GVec3!Float(x.tan, y.tan, z.tan);
+        GVec3!Float tan() {
+            static if (is64) {
+                return GVec3!Float(x.tan64, y.tan64, z.tan64);
+            } else {
+                return GVec3!Float(x.tan, y.tan, z.tan);
+            }
         }
-    }
 
-    pragma(inline, true)
-    GVec3!Float asin() {
-        static if (is64) {
-            return GVec3!Float(x.asin64, y.asin64, z.asin64);
-        } else {
-            return GVec3!Float(x.asin, y.asin, z.asin);
+        GVec3!Float asin() {
+            static if (is64) {
+                return GVec3!Float(x.asin64, y.asin64, z.asin64);
+            } else {
+                return GVec3!Float(x.asin, y.asin, z.asin);
+            }
         }
-    }
 
-    pragma(inline, true)
-    GVec3!Float acos() {
-        static if (is64) {
-            return GVec3!Float(x.acos64, y.acos64, z.acos64);
-        } else {
-            return GVec3!Float(x.acos, y.acos, z.acos);
+        GVec3!Float acos() {
+            static if (is64) {
+                return GVec3!Float(x.acos64, y.acos64, z.acos64);
+            } else {
+                return GVec3!Float(x.acos, y.acos, z.acos);
+            }
         }
-    }
 
-    pragma(inline, true)
-    GVec3!Float atan() {
-        static if (is64) {
-            return GVec3!Float(x.atan64, y.atan64, z.atan64);
-        } else {
-            return GVec3!Float(x.atan, y.atan, z.atan);
+        GVec3!Float atan() {
+            static if (is64) {
+                return GVec3!Float(x.atan64, y.atan64, z.atan64);
+            } else {
+                return GVec3!Float(x.atan, y.atan, z.atan);
+            }
         }
-    }
 
-    pragma(inline, true)
-    Float magnitude() {
-        static if (is64) {
-            return (x * x + y * y + z * z).sqrt64;
-        } else {
-            return (x * x + y * y + z * z).sqrt;
+        Float magnitude() {
+            static if (is64) {
+                return (x * x + y * y + z * z).sqrt64;
+            } else {
+                return (x * x + y * y + z * z).sqrt;
+            }
         }
-    }
 
-    pragma(inline, true)
-    Float magnitudeSquared() {
-        return x * x + y * y + z * z;
+        Float magnitudeSquared() {
+            return x * x + y * y + z * z;
+        }
     }
 
     GVec3!Float normalize() {
@@ -536,157 +593,149 @@ struct GVec4(T) {
         alias Float = float;
     }
 
-    @safe @nogc nothrow:
+    @safe nothrow @nogc:
+
+    IStr toStr() {
+        return "({} {} {} {})".fmt(x, y, z, w);
+    }
+
+    IStr toString() {
+        return toStr();
+    }
+
+    @safe nothrow @nogc pure:
 
     mixin addXyzwOps!(GVec4!T, T, length, form);
 
-    pragma(inline, true)
-    this(T x, T y, T z, T w) {
-        this.x = x;
-        this.y = y;
-        this.z = z;
-        this.w = w;
-    }
+    pragma(inline, true) {
+        this(T x, T y, T z, T w) {
+            this.x = x;
+            this.y = y;
+            this.z = z;
+            this.w = w;
+        }
 
-    pragma(inline, true)
-    this(T x) {
-        this(x, x, x, x);
-    }
+        this(T x) {
+            this(x, x, x, x);
+        }
 
-    pragma(inline, true)
-    this(GVec2!T xy, GVec2!T zw) {
-        this(xy.x, xy.y, zw.x, zw.y);
-    }
+        this(GVec2!T xy, GVec2!T zw) {
+            this(xy.x, xy.y, zw.x, zw.y);
+        }
 
-    pragma(inline, true)
-    bool isZero() {
-        return x == 0 && y == 0 && z == 0 && w == 0;
-    }
+        this(GVec3!T xyz, T w) {
+            this(xyz.x, xyz.y, xyz.z, w);
+        }
 
-    pragma(inline, true)
-    bool isOne() {
-        return x == 1 && y == 1 && z == 1 && w == 1;
-    }
+        @trusted T[] items() => (cast(T*) &this)[0 .. length];
+        bool isZero() => x == 0 && y == 0 && z == 0 && w == 0;
+        bool isOne() => x == 1 && y == 1 && z == 1 && w == 1;
+        GVec3!T chop() => GVec3!T(x, y, z);
+        GVec4!T abs() => GVec4!T(x.abs, y.abs, z.abs, w.abs);
 
-    pragma(inline, true)
-    GVec4!T abs() {
-        return GVec4!T(x.abs, y.abs, z.abs, w.abs);
-    }
-
-    pragma(inline, true)
-    GVec4!T floor() {
-        static if (isIntegerType!T) {
-            return this;
-        } else {
-            static if (is64) {
-                return GVec4!T(x.floor64, y.floor64, z.floor64, w.floor64);
+        GVec4!T floor() {
+            static if (isIntegerType!T) {
+                return this;
             } else {
-                return GVec4!T(x.floor, y.floor, z.floor, w.floor);
+                static if (is64) {
+                    return GVec4!T(x.floor64, y.floor64, z.floor64, w.floor64);
+                } else {
+                    return GVec4!T(x.floor, y.floor, z.floor, w.floor);
+                }
             }
         }
-    }
 
-    pragma(inline, true)
-    GVec4!T ceil() {
-        static if (isIntegerType!T) {
-            return this;
-        } else {
-            static if (is64) {
-                return GVec4!T(x.ceil64, y.ceil64, z.ceil64, w.ceil64);
+        GVec4!T ceil() {
+            static if (isIntegerType!T) {
+                return this;
             } else {
-                return GVec4!T(x.ceil, y.ceil, z.ceil, w.ceil);
+                static if (is64) {
+                    return GVec4!T(x.ceil64, y.ceil64, z.ceil64, w.ceil64);
+                } else {
+                    return GVec4!T(x.ceil, y.ceil, z.ceil, w.ceil);
+                }
             }
         }
-    }
 
-    pragma(inline, true)
-    GVec4!T round() {
-        static if (isIntegerType!T) {
-            return this;
-        } else {
-            static if (is64) {
-                return GVec4!T(x.round64, y.round64, z.round64, w.round64);
+        GVec4!T round() {
+            static if (isIntegerType!T) {
+                return this;
             } else {
-                return GVec4!T(x.round, y.round, z.round, w.round);
+                static if (is64) {
+                    return GVec4!T(x.round64, y.round64, z.round64, w.round64);
+                } else {
+                    return GVec4!T(x.round, y.round, z.round, w.round);
+                }
             }
         }
-    }
 
-    pragma(inline, true)
-    GVec4!Float sqrt() {
-        static if (is64) {
-            return GVec4!Float(x.sqrt64, y.sqrt64, z.sqrt64, w.sqrt64);
-        } else {
-            return GVec4!Float(x.sqrt, y.sqrt, z.sqrt, w.sqrt);
+        GVec4!Float sqrt() {
+            static if (is64) {
+                return GVec4!Float(x.sqrt64, y.sqrt64, z.sqrt64, w.sqrt64);
+            } else {
+                return GVec4!Float(x.sqrt, y.sqrt, z.sqrt, w.sqrt);
+            }
         }
-    }
 
-    pragma(inline, true)
-    GVec4!Float sin() {
-        static if (is64) {
-            return GVec4!Float(x.sin64, y.sin64, z.sin64, w.sin64);
-        } else {
-            return GVec4!Float(x.sin, y.sin, z.sin, w.sin);
+        GVec4!Float sin() {
+            static if (is64) {
+                return GVec4!Float(x.sin64, y.sin64, z.sin64, w.sin64);
+            } else {
+                return GVec4!Float(x.sin, y.sin, z.sin, w.sin);
+            }
         }
-    }
 
-    pragma(inline, true)
-    GVec4!Float cos() {
-        static if (is64) {
-            return GVec4!Float(x.cos64, y.cos64, z.cos64, w.cos64);
-        } else {
-            return GVec4!Float(x.cos, y.cos, z.cos, w.cos);
+        GVec4!Float cos() {
+            static if (is64) {
+                return GVec4!Float(x.cos64, y.cos64, z.cos64, w.cos64);
+            } else {
+                return GVec4!Float(x.cos, y.cos, z.cos, w.cos);
+            }
         }
-    }
 
-    pragma(inline, true)
-    GVec4!Float tan() {
-        static if (is64) {
-            return GVec4!Float(x.tan64, y.tan64, z.tan64, w.tan64);
-        } else {
-            return GVec4!Float(x.tan, y.tan, z.tan, w.tan);
+        GVec4!Float tan() {
+            static if (is64) {
+                return GVec4!Float(x.tan64, y.tan64, z.tan64, w.tan64);
+            } else {
+                return GVec4!Float(x.tan, y.tan, z.tan, w.tan);
+            }
         }
-    }
 
-    pragma(inline, true)
-    GVec4!Float asin() {
-        static if (is64) {
-            return GVec4!Float(x.asin64, y.asin64, z.asin64, w.asin64);
-        } else {
-            return GVec4!Float(x.asin, y.asin, z.asin, w.asin);
+        GVec4!Float asin() {
+            static if (is64) {
+                return GVec4!Float(x.asin64, y.asin64, z.asin64, w.asin64);
+            } else {
+                return GVec4!Float(x.asin, y.asin, z.asin, w.asin);
+            }
         }
-    }
 
-    pragma(inline, true)
-    GVec4!Float acos() {
-        static if (is64) {
-            return GVec4!Float(x.acos64, y.acos64, z.acos64, w.acos64);
-        } else {
-            return GVec4!Float(x.acos, y.acos, z.acos, w.acos);
+        GVec4!Float acos() {
+            static if (is64) {
+                return GVec4!Float(x.acos64, y.acos64, z.acos64, w.acos64);
+            } else {
+                return GVec4!Float(x.acos, y.acos, z.acos, w.acos);
+            }
         }
-    }
 
-    pragma(inline, true)
-    GVec4!Float atan() {
-        static if (is64) {
-            return GVec4!Float(x.atan64, y.atan64, z.atan64, w.atan64);
-        } else {
-            return GVec4!Float(x.atan, y.atan, z.atan, w.atan);
+        GVec4!Float atan() {
+            static if (is64) {
+                return GVec4!Float(x.atan64, y.atan64, z.atan64, w.atan64);
+            } else {
+                return GVec4!Float(x.atan, y.atan, z.atan, w.atan);
+            }
         }
-    }
 
-    pragma(inline, true)
-    Float magnitude() {
-        static if (is64) {
-            return (x * x + y * y + z * z + w * w).sqrt64;
-        } else {
-            return (x * x + y * y + z * z + w * w).sqrt;
+        Float magnitude() {
+            static if (is64) {
+                return (x * x + y * y + z * z + w * w).sqrt64;
+            } else {
+                return (x * x + y * y + z * z + w * w).sqrt;
+            }
         }
-    }
 
-    pragma(inline, true)
-    Float magnitudeSquared() {
-        return x * x + y * y + z * z + w * w;
+        Float magnitudeSquared() {
+            return x * x + y * y + z * z + w * w;
+        }
     }
 
     GVec4!Float normalize() {
@@ -710,14 +759,8 @@ struct GVec4(T) {
 
 /// A generic 2D rectangle.
 struct GRect(T) {
-    GVec2!T position;     /// The position of the rectangle.
-    GVec2!T size;         /// The size of the rectangle.
-
-    // HACK: Something about alias not wanting to work with LDC.
-    ref T x() => position.x;
-    ref T y() => position.y;
-    ref T w() => size.x;
-    ref T h() => size.y;
+    GVec2!T position; /// The position of the rectangle.
+    GVec2!T size;     /// The size of the rectangle.
 
     static if (T.sizeof > float.sizeof) {
         enum is64 = true;
@@ -727,68 +770,196 @@ struct GRect(T) {
         alias Float = float;
     }
 
-    @safe @nogc nothrow:
+    @safe nothrow @nogc:
 
-    pragma(inline, true)
-    this(GVec2!T position, GVec2!T size) {
-        this.position = position;
-        this.size = size;
+    IStr toStr() {
+        return "{} {}".fmt(position, size);
     }
 
-    pragma(inline, true)
-    this(GVec2!T size) {
-        this(GVec2!T(), size);
+    IStr toString() {
+        return toStr();
     }
 
-    pragma(inline, true)
-    this(T x, T y, T w, T h) {
-        this(GVec2!T(x, y), GVec2!T(w, h));
-    }
+    @safe nothrow @nogc pure:
 
-    pragma(inline, true)
-    this(T w, T h) {
-        this(GVec2!T(), GVec2!T(w, h));
-    }
-
-    pragma(inline, true)
-    this(GVec2!T position, T w, T h) {
-        this(position, GVec2!T(w, h));
-    }
-
-    pragma(inline, true)
-    this(T x, T y, GVec2!T size) {
-        this(GVec2!T(x, y), size);
-    }
-
-    pragma(inline, true)
-    GRect!T abs() {
-        return GRect!T(position.abs, size.abs);
-    }
-
-    pragma(inline, true)
-    GRect!T floor() {
-        static if (isIntegerType!T) {
-            return this;
-        } else {
-            return GRect!T(position.floor, size.floor);
+    pragma(inline, true) {
+        this(GVec2!T position, GVec2!T size) {
+            this.position = position;
+            this.size = size;
         }
-    }
 
-    pragma(inline, true)
-    GRect!T ceil() {
-        static if (isIntegerType!T) {
-            return this;
-        } else {
-            return GRect!T(position.ceil, size.ceil);
+        this(GVec2!T size) {
+            this(GVec2!T(), size);
         }
-    }
 
-    pragma(inline, true)
-    GRect!T round() {
-        static if (isIntegerType!T) {
-            return this;
-        } else {
-            return GRect!T(position.round, size.round);
+        this(T x, T y, T w, T h) {
+            this(GVec2!T(x, y), GVec2!T(w, h));
+        }
+
+        this(T w, T h) {
+            this(GVec2!T(), GVec2!T(w, h));
+        }
+
+        this(GVec2!T position, T w, T h) {
+            this(position, GVec2!T(w, h));
+        }
+
+        this(T x, T y, GVec2!T size) {
+            this(GVec2!T(x, y), size);
+        }
+
+        /// The X position of the rectangle.
+        @trusted ref T x() => position.x;
+        /// The Y position of the rectangle.
+        @trusted ref T y() => position.y;
+        /// The width of the rectangle.
+        @trusted ref T w() => size.x;
+        /// The height of the rectangle.
+        @trusted ref T h() => size.y;
+        bool hasSize() => size.x != 0 && size.y != 0;
+        GRect!T abs() => GRect!T(position.abs, size.abs);
+
+        GRect!T floor() {
+            static if (isIntegerType!T) {
+                return this;
+            } else {
+                return GRect!T(position.floor, size.floor);
+            }
+        }
+
+        GRect!T ceil() {
+            static if (isIntegerType!T) {
+                return this;
+            } else {
+                return GRect!T(position.ceil, size.ceil);
+            }
+        }
+
+        GRect!T round() {
+            static if (isIntegerType!T) {
+                return this;
+            } else {
+                return GRect!T(position.round, size.round);
+            }
+        }
+
+        GRect!T area(Hook hook) {
+            return GRect!T(
+                position - origin(hook),
+                size,
+            );
+        }
+
+        GVec2!T point(Hook hook) {
+            return position + origin(hook);
+        }
+
+        GVec2!T topLeftPoint() {
+            return point(Hook.topLeft);
+        }
+
+        GVec2!T topPoint() {
+            return point(Hook.top);
+        }
+
+        GVec2!T topRightPoint() {
+            return point(Hook.topRight);
+        }
+
+        GVec2!T leftPoint() {
+            return point(Hook.left);
+        }
+
+        GVec2!T centerPoint() {
+            return point(Hook.center);
+        }
+
+        GVec2!T rightPoint() {
+            return point(Hook.right);
+        }
+
+        GVec2!T bottomLeftPoint() {
+            return point(Hook.bottomLeft);
+        }
+
+        GVec2!T bottomPoint() {
+            return point(Hook.bottom);
+        }
+
+        GVec2!T bottomRightPoint() {
+            return point(Hook.bottomRight);
+        }
+
+        GRect!T topLeftArea() {
+            return area(Hook.topLeft);
+        }
+
+        GRect!T topArea() {
+            return area(Hook.top);
+        }
+
+        GRect!T topRightArea() {
+            return area(Hook.topRight);
+        }
+
+        GRect!T leftArea() {
+            return area(Hook.left);
+        }
+
+        GRect!T centerArea() {
+            return area(Hook.center);
+        }
+
+        GRect!T rightArea() {
+            return area(Hook.right);
+        }
+
+        GRect!T bottomLeftArea() {
+            return area(Hook.bottomLeft);
+        }
+
+        GRect!T bottomArea() {
+            return area(Hook.bottom);
+        }
+
+        GRect!T bottomRightArea() {
+            return area(Hook.bottomRight);
+        }
+
+        bool hasPoint(GVec2!T point) {
+            return (
+                point.x > position.x &&
+                point.x < position.x + size.x &&
+                point.y > position.y &&
+                point.y < position.y + size.y
+            );
+        }
+
+        bool hasPointInclusive(GVec2!T point) {
+            return (
+                point.x >= position.x &&
+                point.x <= position.x + size.x &&
+                point.y >= position.y &&
+                point.y <= position.y + size.y
+            );
+        }
+
+        bool hasIntersection(GRect!T area) {
+            return (
+                position.x + size.x > area.position.x &&
+                position.x < area.position.x + area.size.x &&
+                position.y + size.y > area.position.y &&
+                position.y < area.position.y + area.size.y
+            );
+        }
+
+        bool hasIntersectionInclusive(GRect!T area) {
+            return (
+                position.x + size.x >= area.position.x &&
+                position.x <= area.position.x + area.size.x &&
+                position.y + size.y >= area.position.y &&
+                position.y <= area.position.y + area.size.y
+            );
         }
     }
 
@@ -820,129 +991,6 @@ struct GRect(T) {
                 case Hook.bottomRight: return size;
             }
         }
-    }
-
-    GRect!T area(Hook hook) {
-        return GRect!T(
-            position - origin(hook),
-            size,
-        );
-    }
-
-    GVec2!T point(Hook hook) {
-        return position + origin(hook);
-    }
-
-    GVec2!T topLeftPoint() {
-        return point(Hook.topLeft);
-    }
-
-    GVec2!T topPoint() {
-        return point(Hook.top);
-    }
-
-    GVec2!T topRightPoint() {
-        return point(Hook.topRight);
-    }
-
-    GVec2!T leftPoint() {
-        return point(Hook.left);
-    }
-
-    GVec2!T centerPoint() {
-        return point(Hook.center);
-    }
-
-    GVec2!T rightPoint() {
-        return point(Hook.right);
-    }
-
-    GVec2!T bottomLeftPoint() {
-        return point(Hook.bottomLeft);
-    }
-
-    GVec2!T bottomPoint() {
-        return point(Hook.bottom);
-    }
-
-    GVec2!T bottomRightPoint() {
-        return point(Hook.bottomRight);
-    }
-
-    GRect!T topLeftArea() {
-        return area(Hook.topLeft);
-    }
-
-    GRect!T topArea() {
-        return area(Hook.top);
-    }
-
-    GRect!T topRightArea() {
-        return area(Hook.topRight);
-    }
-
-    GRect!T leftArea() {
-        return area(Hook.left);
-    }
-
-    GRect!T centerArea() {
-        return area(Hook.center);
-    }
-
-    GRect!T rightArea() {
-        return area(Hook.right);
-    }
-
-    GRect!T bottomLeftArea() {
-        return area(Hook.bottomLeft);
-    }
-
-    GRect!T bottomArea() {
-        return area(Hook.bottom);
-    }
-
-    GRect!T bottomRightArea() {
-        return area(Hook.bottomRight);
-    }
-
-    pragma(inline, true);
-    bool hasPoint(GVec2!T point) {
-        return (
-            point.x > position.x &&
-            point.x < position.x + size.x &&
-            point.y > position.y &&
-            point.y < position.y + size.y
-        );
-    }
-
-    pragma(inline, true);
-    bool hasPointInclusive(GVec2!T point) {
-        return (
-            point.x >= position.x &&
-            point.x <= position.x + size.x &&
-            point.y >= position.y &&
-            point.y <= position.y + size.y
-        );
-    }
-
-    pragma(inline, true);
-    bool hasIntersection(GRect!T area) {
-        return (
-            position.x + size.x > area.position.x &&
-            position.x < area.position.x + area.size.x &&
-            position.y + size.y > area.position.y &&
-            position.y < area.position.y + area.size.y
-        );
-    }
-
-    pragma(inline, true);
-    bool hasIntersectionInclusive(GRect!T area) {
-        return (
-            position.x + size.x >= area.position.x &&
-            position.x <= area.position.x + area.size.x &&
-            position.y + size.y >= area.position.y &&
-            position.y <= area.position.y + area.size.y
-        );
     }
 
     GRect!T intersection(GRect!T area) {
@@ -1076,935 +1124,1112 @@ struct GRect(T) {
     }
 }
 
-/// A 2D Circle using floats.
-struct Circ {
-    Vec2 position;       /// The position of the circle.
-    float radius = 0.0f; /// The radius of the circle.
+/// A generic 2D Circle.
+struct GCirc(T) {
+    GVec2!T position; /// The position of the circle.
+    T radius = 0;     /// The radius of the circle.
 
-    @safe @nogc nothrow:
-
-    pragma(inline, true)
-    this(Vec2 position, float radius) {
-        this.position = position;
-        this.radius = radius;
+    static if (T.sizeof > float.sizeof) {
+        enum is64 = true;
+        alias Float = double;
+    } else {
+        enum is64 = false;
+        alias Float = float;
     }
 
-    pragma(inline, true)
-    this(float x, float y, float radius) {
-        this(Vec2(x, y), radius);
+    @safe nothrow @nogc:
+
+    IStr toStr() {
+        return "{} ({})".fmt(position, radius);
+    }
+
+    IStr toString() {
+        return toStr();
+    }
+
+    @safe nothrow @nogc pure:
+
+    pragma(inline, true) {
+        this(GVec2!T position, T radius) {
+            this.position = position;
+            this.radius = radius;
+        }
+
+        this(T x, T y, T radius) {
+            this(GVec2!T(x, y), radius);
+        }
     }
 }
 
-/// A 2D Line using floats.
-struct Line {
-    Vec2 a; /// The start point of the line.
-    Vec2 b; /// The end point of the line.
+/// A generic 2D Line.
+struct GLine(T) {
+    GVec2!T a; /// The start point of the line.
+    GVec2!T b; /// The end point of the line.
 
-    @safe @nogc nothrow:
+    @safe nothrow @nogc:
 
-    pragma(inline, true)
-    this(Vec2 a, Vec2 b) {
+    IStr toStr() {
+        return "{} {}".fmt(a, b);
+    }
+
+    IStr toString() {
+        return toStr();
+    }
+
+    @safe nothrow @nogc pure:
+
+    pragma(inline, true) {
+        this(GVec2!T a, GVec2!T b) {
+            this.a = a;
+            this.b = b;
+        }
+
+        this(T ax, T ay, T bx, T by) {
+            this(GVec2!T(ax, ay), GVec2!T(bx, by));
+        }
+
+        this(GVec2!T a, T bx, T by) {
+            this(a, GVec2!T(bx, by));
+        }
+
+        this(T ax, T ay, GVec2!T b) {
+            this(GVec2!T(ax, ay), b);
+        }
+    }
+}
+
+/// A generic tween handles the transition from one value to another based on a duration.
+struct GTween(T) {
+    T a;                   /// The first animation value.
+    T b;                   /// The last animation value.
+    float time = 0.0f;     /// The current time, in seconds.
+    float duration = 0.0f; /// The duration, in seconds.
+    TweenMode mode;        /// The mode of the animation.
+    Ease type;             /// The function used to ease from the first to the last value.
+    bool isYoyoing;        /// Controls if the delta given to the update function is reversed.
+
+    @safe nothrow @nogc pure:
+
+    /// Creates a new tween.
+    this(T a, T b, float duration, TweenMode mode = TweenMode.bomb, Ease type = Ease.linear) {
         this.a = a;
         this.b = b;
+        this.duration = duration;
+        this.mode = mode;
+        this.type = type;
     }
 
-    pragma(inline, true)
-    this(float ax, float ay, float bx, float by) {
-        this(Vec2(ax, ay), Vec2(bx, by));
+    /// Returns true if the current time is equal to zero.
+    /// This function makes sense when the tween mode is set to bomb.
+    bool isAtStart() {
+        return time == 0.0f;
     }
 
-    pragma(inline, true)
-    this(Vec2 a, float bx, float by) {
-        this(a, Vec2(bx, by));
+    /// Returns true if the current time is equal to the duration.
+    /// This function makes sense when the tween mode is set to bomb.
+    bool isAtEnd() {
+        return time >= duration;
     }
 
-    pragma(inline, true)
-    this(float ax, float ay, Vec2 b) {
-        this(Vec2(ax, ay), b);
+    /// Returns the current value.
+    /// The value is between a and b.
+    T now() {
+        if (time <= 0.0f) {
+            return a;
+        } else if (time >= duration) {
+            return b;
+        } else {
+            return a.lerp(b, ease(type)(progress));
+        }
     }
-}
 
-pragma(inline, true)
-T abs(T)(T x) {
-    return cast(T) (x < 0 ? -x : x);
-}
-
-pragma(inline, true)
-T min(T)(T a, T b) {
-    return a < b ? a : b;
-}
-
-pragma(inline, true)
-T min3(T)(T a, T b, T c) {
-    return min(a, b).min(c);
-}
-
-pragma(inline, true)
-T min4(T)(T a, T b, T c, T d) {
-    return min(a, b).min(c).min(d);
-}
-
-pragma(inline, true)
-T max(T)(T a, T b) {
-    return a < b ? b : a;
-}
-
-pragma(inline, true)
-T max3(T)(T a, T b, T c) {
-    return max(a, b).max(c);
-}
-
-pragma(inline, true)
-T max4(T)(T a, T b, T c, T d) {
-    return max(a, b).max(c).max(d);
-}
-
-pragma(inline, true)
-T sign(T)(T x) {
-    return x < 0 ? -1 : 1;
-}
-
-pragma(inline, true)
-T clamp(T)(T x, T a, T b) {
-    return max(x, a).min(b);
-}
-
-T wrap(T)(T x, T a, T b) {
-    auto result = x;
-    auto range = cast(T) (b - a);
-    static if (isUnsignedType!T) {
-        result = cast(T) wrap!long(x, a, b);
-    } else static if (isFloatingType!T) {
-        result = fmod(x - a, range);
-        if (result < 0) result += range;
-        result += a;
-    } else {
-        result = cast(T) ((x - a) % range);
-        if (result < 0) result += range;
-        result += a;
+    /// Updates the current time by the given delta and returns the current value.
+    T update(float delta) {
+        setTime(time + (isYoyoing ? -delta : delta));
+        return now;
     }
-    return result;
-}
 
-// TODO: Look at this again because I feel it returns weird values sometimes.
-T snap(T)(T x, T step) {
-    static if (isIntegerType!T) {
-        return cast(T) snap!double(cast(double) x, cast(double) step).round();
-    } else {
-        return (x / step).round() * step;
+    /// Resets the current time and returns the current value.
+    T reset() {
+        setTime(0.0f);
+        return now;
+    }
+
+    /// Returns the current progress.
+    /// The progress is between 0.0 and 1.0.
+    float progress() {
+        return duration == 0.0f ? 0.0f : clamp(time / duration, 0.0f, 1.0f);
+    }
+
+    /// Sets the current progress to a specific value.
+    /// The progress is between 0.0 and 1.0.
+    void setProgress(float value) {
+        time = duration * clamp(value, 0.0f, 1.0f);
+    }
+
+    /// Sets the current time to a specific value.
+    /// Takes the tween mode into account.
+    void setTime(float value) {
+        final switch (mode) {
+            case TweenMode.bomb:
+                time = clamp(value, 0.0f, duration);
+                break;
+            case TweenMode.loop:
+                time = wrap(value, 0.0f, duration);
+                break;
+            case TweenMode.yoyo:
+                time = clamp(value, 0.0f, duration);
+                if (value < 0.0f) {
+                    isYoyoing = false;
+                } else if (value > duration) {
+                    isYoyoing = true;
+                }
+                break;
+        }
     }
 }
 
-@trusted
-float fmod(float x, float y) {
-    return stdc.fmodf(x, y);
-}
-
-@trusted
-double fmod64(double x, double y) {
-    return stdc.fmod(x, y);
-}
-
-@trusted
-float remainder(float x, float y) {
-    return stdc.remainderf(x, y);
-}
-
-@trusted
-double remainder64(double x, double y) {
-    return stdc.remainder(x, y);
-}
-
-@trusted
-float exp(float x) {
-    return stdc.expf(x);
-}
-
-@trusted
-double exp64(double x) {
-    return stdc.exp(x);
-}
-
-@trusted
-float exp2(float x) {
-    return stdc.exp2f(x);
-}
-
-@trusted
-double exp264(double x) {
-    return stdc.exp2(x);
-}
-
-@trusted
-float expm1(float x) {
-    return stdc.expm1f(x);
-}
-
-@trusted
-double expm164(double x) {
-    return stdc.expm1(x);
-}
-
-@trusted
-float log(float x) {
-    return stdc.logf(x);
-}
-
-@trusted
-double log64(double x) {
-    return stdc.log(x);
-}
-
-@trusted
-float log10(float x) {
-    return stdc.log10f(x);
-}
-
-@trusted
-double log1064(double x) {
-    return stdc.log10(x);
-}
-
-@trusted
-float log2(float x) {
-    return stdc.log2f(x);
-}
-
-@trusted
-double log264(double x) {
-    return stdc.log2(x);
-}
-
-@trusted
-float log1p(float x) {
-    return stdc.log1pf(x);
-}
-
-@trusted
-double log1p64(double x) {
-    return stdc.log1p(x);
-}
-
-@trusted
-float pow(float base, float exponent) {
-    return stdc.powf(base, exponent);
-}
-
-@trusted
-double pow64(double base, double exponent) {
-    return stdc.pow(base, exponent);
-}
-
-@trusted
-float atan2(float y, float x) {
-    return stdc.atan2f(y, x);
-}
-
-@trusted
-double atan264(double y, double x) {
-    return stdc.atan2(y, x);
-}
-
-pragma(inline, true)
-@trusted
-float cbrt(float x) {
-    return stdc.cbrtf(x);
-}
-
-pragma(inline, true)
-@trusted
-double cbrt64(double x) {
-    return stdc.cbrt(x);
-}
-
-pragma(inline, true)
-float floorX(float x) {
-    return (x <= 0.0f && (cast(float) cast(int) x) != x)
-        ? (cast(float) cast(int) x) - 1.0f
-        : (cast(float) cast(int) x);
-}
-
-pragma(inline, true)
-double floorX64(double x) {
-    return (x <= 0.0 && (cast(double) cast(long) x) != x)
-        ? (cast(double) cast(long) x) - 1.0
-        : (cast(double) cast(long) x);
-}
-
-pragma(inline, true)
-@trusted
-float floor(float x) {
-    return stdc.floorf(x);
-}
-
-pragma(inline, true)
-@trusted
-double floor64(double  x) {
-    return stdc.floor(x);
-}
-
-pragma(inline, true)
-float ceilX(float x) {
-    return (x <= 0.0f || (cast(float) cast(int) x) == x)
-        ? (cast(float) cast(int) x)
-        : (cast(float) cast(int) x) + 1.0f;
-}
-
-pragma(inline, true)
-double ceilX64(double x) {
-    return (x <= 0.0 || (cast(double) cast(long) x) == x)
-        ? (cast(double) cast(long) x)
-        : (cast(double) cast(long) x) + 1.0;
-}
-
-pragma(inline, true)
-@trusted
-float ceil(float x) {
-    return stdc.ceilf(x);
-}
-
-pragma(inline, true)
-@trusted
-double ceil64(double x) {
-    return stdc.ceil(x);
-}
-
-pragma(inline, true)
-float roundX(float x) {
-    return (x <= 0.0f)
-        ? cast(float) cast(int) (x - 0.5f)
-        : cast(float) cast(int) (x + 0.5f);
-}
-
-pragma(inline, true)
-double roundX64(double x) {
-    return (x <= 0.0)
-        ? cast(double) cast(long) (x - 0.5)
-        : cast(double) cast(long) (x + 0.5);
-}
-
-pragma(inline, true)
-@trusted
-float round(float x) {
-    return stdc.roundf(x);
-}
-
-pragma(inline, true)
-@trusted
-double round64(double x) {
-    return stdc.round(x);
-}
-
-pragma(inline, true)
-@trusted
-float sqrt(float x) {
-    return stdc.sqrtf(x);
-}
-
-pragma(inline, true)
-@trusted
-double sqrt64(double x) {
-    return stdc.sqrt(x);
-}
-
-pragma(inline, true)
-@trusted
-float sin(float x) {
-    return stdc.sinf(x);
-}
-
-pragma(inline, true)
-@trusted
-double sin64(double x) {
-    return stdc.sin(x);
-}
-
-pragma(inline, true)
-@trusted
-float cos(float x) {
-    return stdc.cosf(x);
-}
-
-pragma(inline, true)
-@trusted
-double cos64(double x) {
-    return stdc.cos(x);
-}
-
-pragma(inline, true)
-@trusted
-float tan(float x) {
-    return stdc.tanf(x);
-}
-
-pragma(inline, true)
-@trusted
-double tan64(double x) {
-    return stdc.tan(x);
-}
-
-pragma(inline, true)
-@trusted
-float asin(float x) {
-    return stdc.asinf(x);
-}
-
-pragma(inline, true)
-@trusted
-double asin64(double x) {
-    return stdc.asin(x);
-}
-
-pragma(inline, true)
-@trusted
-float acos(float x) {
-    return stdc.acosf(x);
-}
-
-pragma(inline, true)
-@trusted
-double acos64(double x) {
-    return stdc.acos(x);
-}
-
-pragma(inline, true)
-@trusted
-float atan(float x) {
-    return stdc.atanf(x);
-}
-
-pragma(inline, true)
-@trusted
-double atan64(double x) {
-    return stdc.atan(x);
-}
-
-pragma(inline, true)
-float lerp(float from, float to, float weight) {
-    return from + (to - from) * weight;
-}
-
-pragma(inline, true)
-double lerp64(double from, double to, double weight) {
-    return from + (to - from) * weight;
-}
-
-float smoothstep(float from, float to, float weight) {
-    auto v = weight * weight * (3.0f - 2.0f * weight);
-    return (to * v) + (from * (1.0f - v));
-}
-
-double smoothstep64(double from, double to, double weight) {
-    auto v = weight * weight * (3.0 - 2.0 * weight);
-    return (to * v) + (from * (1.0 - v));
-}
-
-float smootherstep(float from, float to, float weight) {
-    auto v = weight * weight * weight * (weight * (weight * 6.0f - 15.0f) + 10.0f);
-    return (to * v) + (from * (1.0f - v));
-}
-
-double smootherstep64(double from, double to, double weight) {
-    auto v = weight * weight * weight * (weight * (weight * 6.0 - 15.0) + 10.0);
-    return (to * v) + (from * (1.0 - v));
-}
-
-pragma(inline, true)
-float easeInSine(float x) {
-    return 1.0f - cos((x * pi) / 2.0f);
-}
-
-pragma(inline, true)
-float easeOutSine(float x) {
-    return sin((x * pi) / 2.0f);
-}
-
-pragma(inline, true)
-float easeInOutSine(float x) {
-    return -(cos(pi * x) - 1.0f) / 2.0f;
-}
-
-pragma(inline, true)
-float easeInCubic(float x) {
-    return x * x * x;
-}
-
-pragma(inline, true)
-float easeOutCubic(float x) {
-    return 1.0f - pow(1.0f - x, 3.0f);
-}
-
-pragma(inline, true)
-float easeInOutCubic(float x) {
-    return x < 0.5f ? 4.0f * x * x * x : 1.0f - pow(-2.0f * x + 2.0f, 3.0f) / 2.0f;
-}
-
-pragma(inline, true)
-float easeInQuint(float x) {
-    return x * x * x * x * x;
-}
-
-pragma(inline, true)
-float easeOutQuint(float x) {
-    return 1.0f - pow(1.0f - x, 5.0f);
-}
-
-pragma(inline, true)
-float easeInOutQuint(float x) {
-    return x < 0.5f ? 16.0f * x * x * x * x * x : 1.0f - pow(-2.0f * x + 2.0f, 5.0f) / 2.0f;
-}
-
-pragma(inline, true)
-float easeInCirc(float x) {
-    return 1.0f - sqrt(1.0f - pow(x, 2.0f));
-}
-
-pragma(inline, true)
-float easeOutCirc(float x) {
-    return sqrt(1.0f - pow(x - 1.0f, 2.0f));
-}
-
-pragma(inline, true)
-float easeInOutCirc(float x) {
-    return x < 0.5f
-        ? (1.0f - sqrt(1.0f - pow(2.0f * x, 2.0f))) / 2.0f
-        : (sqrt(1.0f - pow(-2.0f * x + 2.0f, 2.0f)) + 1.0f) / 2.0f;
-}
-
-pragma(inline, true)
-float easeInElastic(float x) {
-    enum c4 = (2.0f * pi) / 3.0f;
-
-    return x == 0.0f
-        ? 0.0f
-        : x == 1.0f
-        ? 1.0f
-        : -pow(2.0f, 10.0f * x - 10.0f) * sin((x * 10.0f - 10.75f) * c4);
-}
-
-pragma(inline, true)
-float easeOutElastic(float x) {
-    enum c4 = (2.0f * pi) / 3.0f;
-
-    return x == 0.0f
-        ? 0.0f
-        : x == 1.0f
-        ? 1.0f
-        : pow(2.0f, -10.0f * x) * sin((x * 10.0f - 0.75f) * c4) + 1.0f;
-}
-
-pragma(inline, true)
-float easeInOutElastic(float x) {
-    enum c5 = (2.0f * pi) / 4.5f;
-
-    return x == 0.0f
-        ? 0.0f
-        : x == 1.0f
-        ? 1.0f
-        : x < 0.5f
-        ? -(pow(2.0f, 20.0f * x - 10.0f) * sin((20.0f * x - 11.125f) * c5)) / 2.0f
-        : (pow(2.0f, -20.0f * x + 10.0f) * sin((20.0f * x - 11.125f) * c5)) / 2.0f + 1.0f;
-}
-
-pragma(inline, true)
-float easeInQuad(float x) {
-    return x * x;
-}
-
-pragma(inline, true)
-float easeOutQuad(float x) {
-    return 1.0f - (1.0f - x) * (1.0f - x);
-}
-
-pragma(inline, true)
-float easeInOutQuad(float x) {
-    return x < 0.5f ? 2.0f * x * x : 1.0f - pow(-2.0f * x + 2.0f, 2.0f) / 2.0f;
-}
-
-pragma(inline, true)
-float easeInQuart(float x) {
-    return x * x * x * x;
-}
-
-pragma(inline, true)
-float easeOutQuart(float x) {
-    return 1.0f - pow(1.0f - x, 4.0f);
-}
-
-pragma(inline, true)
-float easeInOutQuart(float x) {
-    return x < 0.5f ? 8.0f * x * x * x * x : 1.0f - pow(-2.0f * x + 2.0f, 4.0f) / 2.0f;
-}
-
-pragma(inline, true)
-float easeInExpo(float x) {
-    return x == 0.0f ? 0.0f : pow(2.0f, 10.0f * x - 10.0f);
-}
-
-pragma(inline, true)
-float easeOutExpo(float x) {
-    return x == 1.0f ? 1.0f : 1.0f - pow(2.0f, -10.0f * x);
-}
-
-pragma(inline, true)
-float easeInOutExpo(float x) {
-    return x == 0.0f
-        ? 0.0f
-        : x == 1.0f
-        ? 1.0f
-        : x < 0.5f ? pow(2.0f, 20.0f * x - 10.0f) / 2.0f
-        : (2.0f - pow(2.0f, -20.0f * x + 10.0f)) / 2.0f;
-}
-
-pragma(inline, true)
-float easeInBack(float x) {
-    enum c1 = 1.70158f;
-    enum c3 = c1 + 1.0f;
-
-    return c3 * x * x * x - c1 * x * x;
-}
-
-pragma(inline, true)
-float easeOutBack(float x) {
-    enum c1 = 1.70158f;
-    enum c3 = c1 + 1.0f;
-
-    return 1.0f + c3 * pow(x - 1.0f, 3.0f) + c1 * pow(x - 1.0f, 2.0f);
-}
-
-pragma(inline, true)
-float easeInOutBack(float x) {
-    enum c1 = 1.70158f;
-    enum c2 = c1 * 1.525f;
-
-    return x < 0.5f
-        ? (pow(2.0f * x, 2.0f) * ((c2 + 1.0f) * 2.0f * x - c2)) / 2.0f
-        : (pow(2.0f * x - 2.0f, 2.0f) * ((c2 + 1.0f) * (x * 2.0f - 2.0f) + c2) + 2.0f) / 2.0f;
-}
-
-pragma(inline, true)
-float easeInBounce(float x) {
-    return 1.0f - easeOutBounce(1.0f - x);
-}
-
-pragma(inline, true)
-float easeOutBounce(float x) {
-    enum n1 = 7.5625f;
-    enum d1 = 2.75f;
-
-    return (x < 1.0f / d1)
-        ? n1 * x * x
-        : (x < 2.0f / d1)
-        ? n1 * (x -= 1.5f / d1) * x + 0.75f
-        : (x < 2.5f / d1)
-        ? n1 * (x -= 2.25f / d1) * x + 0.9375f
-        : n1 * (x -= 2.625f / d1) * x + 0.984375f;
-}
-
-pragma(inline, true)
-float easeInOutBounce(float x) {
-    return x < 0.5f
-        ? (1.0f - easeOutBounce(1.0f - 2.0f * x)) / 2.0f
-        : (1.0f + easeOutBounce(2.0f * x - 1.0f)) / 2.0f;
-}
-
-pragma(inline, true)
-float moveTo(float from, float to, float delta) {
-    return (abs(to - from) > abs(delta))
-        ? from + sign(to - from) * delta
-        : to;
-}
-
-pragma(inline, true)
-float moveTo64(double from, double to, double delta) {
-    return (abs(to - from) > abs(delta))
-        ? from + sign(to - from) * delta
-        : to;
-}
-
-Vec2 moveTo(Vec2 from, Vec2 to, Vec2 delta) {
-    Vec2 result = Vec2();
-    auto offset = from.directionTo(to) * delta;
-    if (abs(to.x - from.x) > abs(offset.x)) result.x = from.x + offset.x;
-    else result.x = to.x;
-    if (abs(to.y - from.y) > abs(offset.y)) result.y = from.y + offset.y;
-    else result.y = to.y;
-    return result;
-}
-
-Vec3 moveTo(Vec3 from, Vec3 to, Vec3 delta) {
-    Vec3 result = Vec3();
-    auto offset = from.directionTo(to) * delta;
-    if (abs(to.x - from.x) > abs(offset.x)) result.x = from.x + offset.x;
-    else result.x = to.x;
-    if (abs(to.y - from.y) > abs(offset.y)) result.y = from.y + offset.y;
-    else result.y = to.y;
-    if (abs(to.z - from.z) > abs(offset.z)) result.z = from.z + offset.z;
-    else result.z = to.z;
-    return result;
-}
-
-Vec4 moveTo(Vec4 from, Vec4 to, Vec4 delta) {
-    Vec4 result = Vec4();
-    auto offset = from.directionTo(to) * delta;
-    if (abs(to.x - from.x) > abs(offset.x)) result.x = from.x + offset.x;
-    else result.x = to.x;
-    if (abs(to.y - from.y) > abs(offset.y)) result.y = from.y + offset.y;
-    else result.y = to.y;
-    if (abs(to.z - from.z) > abs(offset.z)) result.z = from.z + offset.z;
-    else result.z = to.z;
-    if (abs(to.w - from.w) > abs(offset.w)) result.w = from.w + offset.w;
-    else result.w = to.w;
-    return result;
-}
-
-DVec2 moveTo(DVec2 from, DVec2 to, DVec2 delta) {
-    DVec2 result = DVec2();
-    auto offset = from.directionTo(to) * delta;
-    if (abs(to.x - from.x) > abs(offset.x)) result.x = from.x + offset.x;
-    else result.x = to.x;
-    if (abs(to.y - from.y) > abs(offset.y)) result.y = from.y + offset.y;
-    else result.y = to.y;
-    return result;
-}
-
-DVec3 moveTo(DVec3 from, DVec3 to, DVec3 delta) {
-    DVec3 result = DVec3();
-    auto offset = from.directionTo(to) * delta;
-    if (abs(to.x - from.x) > abs(offset.x)) result.x = from.x + offset.x;
-    else result.x = to.x;
-    if (abs(to.y - from.y) > abs(offset.y)) result.y = from.y + offset.y;
-    else result.y = to.y;
-    if (abs(to.z - from.z) > abs(offset.z)) result.z = from.z + offset.z;
-    else result.z = to.z;
-    return result;
-}
-
-DVec4 moveTo(DVec4 from, DVec4 to, DVec4 delta) {
-    DVec4 result = DVec4();
-    auto offset = from.directionTo(to) * delta;
-    if (abs(to.x - from.x) > abs(offset.x)) result.x = from.x + offset.x;
-    else result.x = to.x;
-    if (abs(to.y - from.y) > abs(offset.y)) result.y = from.y + offset.y;
-    else result.y = to.y;
-    if (abs(to.z - from.z) > abs(offset.z)) result.z = from.z + offset.z;
-    else result.z = to.z;
-    if (abs(to.w - from.w) > abs(offset.w)) result.w = from.w + offset.w;
-    else result.w = to.w;
-    return result;
-}
-
-float moveToWithSlowdown(float from, float to, float delta, float slowdown) {
-    if (from.fequals(to)) return to;
-    auto target = ((from * (slowdown - 1.0f)) + to) / slowdown;
-    return from + (target - from) * delta;
-}
-
-float moveToWithSlowdown64(double from, double to, double delta, double slowdown) {
-    if (from.fequals64(to)) return to;
-    auto target = ((from * (slowdown - 1.0)) + to) / slowdown;
-    return from + (target - from) * delta;
-}
-
-Vec2 moveToWithSlowdown(Vec2 from, Vec2 to, Vec2 delta, float slowdown) {
-    return Vec2(
-        moveToWithSlowdown(from.x, to.x, delta.x, slowdown),
-        moveToWithSlowdown(from.y, to.y, delta.y, slowdown),
-    );
-}
-
-Vec3 moveToWithSlowdown(Vec3 from, Vec3 to, Vec3 delta, float slowdown) {
-    return Vec3(
-        moveToWithSlowdown(from.x, to.x, delta.x, slowdown),
-        moveToWithSlowdown(from.y, to.y, delta.y, slowdown),
-        moveToWithSlowdown(from.z, to.z, delta.z, slowdown),
-    );
-}
-
-Vec4 moveToWithSlowdown(Vec4 from, Vec4 to, Vec4 delta, float slowdown) {
-    return Vec4(
-        moveToWithSlowdown(from.x, to.x, delta.x, slowdown),
-        moveToWithSlowdown(from.y, to.y, delta.y, slowdown),
-        moveToWithSlowdown(from.z, to.z, delta.z, slowdown),
-        moveToWithSlowdown(from.w, to.w, delta.w, slowdown),
-    );
-}
-
-DVec2 moveToWithSlowdown(DVec2 from, DVec2 to, DVec2 delta, double slowdown) {
-    return DVec2(
-        moveToWithSlowdown64(from.x, to.x, delta.x, slowdown),
-        moveToWithSlowdown64(from.y, to.y, delta.y, slowdown),
-    );
-}
-
-DVec3 moveToWithSlowdown(DVec3 from, DVec3 to, DVec3 delta, double slowdown) {
-    return DVec3(
-        moveToWithSlowdown64(from.x, to.x, delta.x, slowdown),
-        moveToWithSlowdown64(from.y, to.y, delta.y, slowdown),
-        moveToWithSlowdown64(from.z, to.z, delta.z, slowdown),
-    );
-}
-
-DVec4 moveToWithSlowdown(DVec4 from, DVec4 to, DVec4 delta, double slowdown) {
-    return DVec4(
-        moveToWithSlowdown64(from.x, to.x, delta.x, slowdown),
-        moveToWithSlowdown64(from.y, to.y, delta.y, slowdown),
-        moveToWithSlowdown64(from.z, to.z, delta.z, slowdown),
-        moveToWithSlowdown64(from.w, to.w, delta.w, slowdown),
-    );
-}
-
-deprecated("Use `fequals` instead.")
-alias equals = fequals;
-
-pragma(inline, true)
-bool fequals(float a, float b, float localEpsilon = epsilon) {
-    return abs(a - b) < localEpsilon;
-}
-
-pragma(inline, true)
-bool fequals64(double a, double b, double localEpsilon = epsilon) {
-    return abs(a - b) < localEpsilon;
-}
-
-pragma(inline, true)
-bool fequals(Vec2 a, Vec2 b, float localEpsilon = epsilon) {
-    return fequals(a.x, b.x, localEpsilon) && fequals(a.y, b.y, localEpsilon);
-}
-
-pragma(inline, true)
-bool fequals(Vec3 a, Vec3 b, float localEpsilon = epsilon) {
-    return fequals(a.x, b.x, localEpsilon) && fequals(a.y, b.y, localEpsilon) && fequals(a.z, b.z, localEpsilon);
-}
-
-pragma(inline, true)
-bool fequals(Vec4 a, Vec4 b, float localEpsilon = epsilon) {
-    return fequals(a.x, b.x, localEpsilon) && fequals(a.y, b.y, localEpsilon) && fequals(a.z, b.z, localEpsilon) && fequals(a.w, b.w, localEpsilon);
-}
-
-pragma(inline, true)
-bool fequals(DVec2 a, DVec2 b, double localEpsilon = epsilon) {
-    return fequals(a.x, b.x, localEpsilon) && fequals(a.y, b.y, localEpsilon);
-}
-
-pragma(inline, true)
-bool fequals(DVec3 a, DVec3 b, double localEpsilon = epsilon) {
-    return fequals(a.x, b.x, localEpsilon) && fequals(a.y, b.y, localEpsilon) && fequals(a.z, b.z, localEpsilon);
-}
-
-pragma(inline, true)
-bool fequals(DVec4 a, DVec4 b, double localEpsilon = epsilon) {
-    return fequals(a.x, b.x, localEpsilon) && fequals(a.y, b.y, localEpsilon) && fequals(a.z, b.z, localEpsilon) && fequals(a.w, b.w, localEpsilon);
-}
-
-pragma(inline, true)
-float toRadians(float degrees) {
-    return degrees * pi180;
-}
-
-pragma(inline, true)
-double toRadians64(double degrees) {
-    return degrees * pi180;
-}
-
-pragma(inline, true)
-float toDegrees(float radians) {
-    return radians * dpi180;
-}
-
-pragma(inline, true)
-double toDegrees64(double radians) {
-    return radians * dpi180;
-}
-
-pragma(inline, true);
-Rgba toRgb(uint rgb) {
-    return Rgba(
-        (rgb & 0xFF0000) >> 16,
-        (rgb & 0xFF00) >> 8,
-        (rgb & 0xFF),
-    );
-}
-
-alias toColor = toRgba;
-
-pragma(inline, true);
-Rgba toRgba(uint rgba) {
-    return Rgba(
-        (rgba & 0xFF000000) >> 24,
-        (rgba & 0xFF0000) >> 16,
-        (rgba & 0xFF00) >> 8,
-        (rgba & 0xFF),
-    );
-}
-
-pragma(inline, true);
-Rgba toRgba(Vec3 vec) {
-    return Rgba(
-        cast(ubyte) clamp(vec.x, 0.0f, 255.0f),
-        cast(ubyte) clamp(vec.y, 0.0f, 255.0f),
-        cast(ubyte) clamp(vec.z, 0.0f, 255.0f),
-        255,
-    );
-}
-
-pragma(inline, true);
-Rgba toRgba(Vec4 vec) {
-    return Rgba(
-        cast(ubyte) clamp(vec.x, 0.0f, 255.0f),
-        cast(ubyte) clamp(vec.y, 0.0f, 255.0f),
-        cast(ubyte) clamp(vec.z, 0.0f, 255.0f),
-        cast(ubyte) clamp(vec.w, 0.0f, 255.0f),
-    );
-}
-
-pragma(inline, true);
-IVec2 toIVec(Vec2 vec) {
-    return IVec2(cast(int) vec.x, cast(int) vec.y);
-}
-
-pragma(inline, true);
-IVec3 toIVec(Vec3 vec) {
-    return IVec3(cast(int) vec.x, cast(int) vec.y, cast(int) vec.z);
-}
-
-pragma(inline, true);
-IVec4 toIVec(Vec4 vec) {
-    return IVec4(cast(int) vec.x, cast(int) vec.y, cast(int) vec.z, cast(int) vec.w);
-}
-
-pragma(inline, true);
-Vec2 toVec(IVec2 vec) {
-    return Vec2(vec.x, vec.y);
-}
-
-pragma(inline, true);
-Vec3 toVec(IVec3 vec) {
-    return Vec3(vec.x, vec.y, vec.z);
-}
-
-pragma(inline, true);
-Vec4 toVec(IVec4 vec) {
-    return Vec4(vec.x, vec.y, vec.z, vec.w);
-}
-
-pragma(inline, true);
-Vec4 toVec(Rgba color) {
-    return Vec4(color.r, color.g, color.b, color.a);
-}
-
-pragma(inline, true);
-IRect toIRect(Rect rect) {
-    return IRect(rect.position.toIVec(), rect.size.toIVec());
-}
-
-pragma(inline, true);
-Rect toRect(IRect rect) {
-    return Rect(rect.position.toVec(), rect.size.toVec());
+// TODO: Add docs.
+struct SmoothToggle {
+    float progress = 0.0f;
+    bool state;
+
+    @safe nothrow @nogc pure:
+
+    this(bool state) {
+        this.state = state;
+        this.progress = state ? 1.0f : 0.0f;
+    }
+
+    bool isAtStart() {
+        return progress == 0.0f;
+    }
+
+    bool isAtEnd() {
+        return progress == 1.0f;
+    }
+
+    float now() {
+        if (progress <= 0.0f) {
+            return 0.0f;
+        } else if (progress >= 1.0f) {
+            return 1.0f;
+        } else {
+            return progress;
+        }
+    }
+
+    float update(float delta) {
+        return progress.followState(state, delta);
+    }
+
+    float reset() {
+        setProgress(0.0f);
+        return now;
+    }
+
+    void setProgress(float value) {
+        progress = clamp(value, 0.0f, 1.0f);
+    }
+
+    bool toggle() {
+        state = !state;
+        return state;
+    }
+
+    bool toggleSnap() {
+        state = !state;
+        progress = state ? 1.0f : 0.0f;
+        return state;
+    }
+}
+
+pragma(inline, true) @trusted {
+    T abs(T)(T x) {
+        return cast(T) (x < 0 ? -x : x);
+    }
+
+    T min(T)(T a, T b) {
+        return a < b ? a : b;
+    }
+
+    T min3(T)(T a, T b, T c) {
+        return min(a, b).min(c);
+    }
+
+    T min4(T)(T a, T b, T c, T d) {
+        return min(a, b).min(c).min(d);
+    }
+
+    T max(T)(T a, T b) {
+        return a < b ? b : a;
+    }
+
+    T max3(T)(T a, T b, T c) {
+        return max(a, b).max(c);
+    }
+
+    T max4(T)(T a, T b, T c, T d) {
+        return max(a, b).max(c).max(d);
+    }
+
+    T sign(T)(T x) {
+        return x < 0
+            ? -1
+            : x > 0
+            ? 1
+            : 0;
+    }
+
+    T clamp(T)(T x, T a, T b) {
+        return max(x, a).min(b);
+    }
+
+    T wrap(T)(T x, T a, T b) {
+        T result = void;
+        auto range = cast(T) (b - a);
+        static if (isUnsignedType!T) {
+            result = cast(T) wrap!long(x, a, b);
+        } else static if (isFloatingType!T) {
+            result = fmod(x - a, range);
+            if (result < 0) result += range;
+            result += a;
+        } else {
+            result = cast(T) ((x - a) % range);
+            if (result < 0) result += range;
+            result += a;
+        }
+        return result;
+    }
+
+    // TODO: Look at this again because I feel it returns weird values sometimes.
+    T snap(T)(T x, T step) {
+        static if (isIntegerType!T) {
+            return cast(T) snap!double(cast(double) x, cast(double) step).round();
+        } else {
+            return (x / step).round() * step;
+        }
+    }
+
+    bool isNan(float x) {
+        return !(x == x);
+    }
+
+    bool isNan64(double x) {
+        return !(x == x);
+    }
+
+    float fmod(float x, float y) {
+        return stdc.fmodf(x, y);
+    }
+
+    double fmod64(double x, double y) {
+        return stdc.fmod(x, y);
+    }
+
+    float remainder(float x, float y) {
+        return stdc.remainderf(x, y);
+    }
+
+    double remainder64(double x, double y) {
+        return stdc.remainder(x, y);
+    }
+
+    float exp(float x) {
+        return stdc.expf(x);
+    }
+
+    double exp64(double x) {
+        return stdc.exp(x);
+    }
+
+    float exp2(float x) {
+        return stdc.exp2f(x);
+    }
+
+    double exp264(double x) {
+        return stdc.exp2(x);
+    }
+
+    float expm1(float x) {
+        return stdc.expm1f(x);
+    }
+
+    double expm164(double x) {
+        return stdc.expm1(x);
+    }
+
+    float log(float x) {
+        return stdc.logf(x);
+    }
+
+    double log64(double x) {
+        return stdc.log(x);
+    }
+
+    float log10(float x) {
+        return stdc.log10f(x);
+    }
+
+    double log1064(double x) {
+        return stdc.log10(x);
+    }
+
+    float log2(float x) {
+        return stdc.log2f(x);
+    }
+
+    double log264(double x) {
+        return stdc.log2(x);
+    }
+
+    float log1p(float x) {
+        return stdc.log1pf(x);
+    }
+
+    double log1p64(double x) {
+        return stdc.log1p(x);
+    }
+
+    float pow(float base, float exponent) {
+        return stdc.powf(base, exponent);
+    }
+
+    double pow64(double base, double exponent) {
+        return stdc.pow(base, exponent);
+    }
+
+    float atan2(float y, float x) {
+        return stdc.atan2f(y, x);
+    }
+
+    double atan264(double y, double x) {
+        return stdc.atan2(y, x);
+    }
+
+    float cbrt(float x) {
+        return stdc.cbrtf(x);
+    }
+
+    double cbrt64(double x) {
+        return stdc.cbrt(x);
+    }
+
+    float floorX(float x) {
+        return (x <= 0.0f && (cast(float) cast(int) x) != x)
+            ? (cast(float) cast(int) x) - 1.0f
+            : (cast(float) cast(int) x);
+    }
+
+    double floorX64(double x) {
+        return (x <= 0.0 && (cast(double) cast(long) x) != x)
+            ? (cast(double) cast(long) x) - 1.0
+            : (cast(double) cast(long) x);
+    }
+
+    float floor(float x) {
+        return stdc.floorf(x);
+    }
+
+    double floor64(double  x) {
+        return stdc.floor(x);
+    }
+
+    float ceilX(float x) {
+        return (x <= 0.0f || (cast(float) cast(int) x) == x)
+            ? (cast(float) cast(int) x)
+            : (cast(float) cast(int) x) + 1.0f;
+    }
+
+    double ceilX64(double x) {
+        return (x <= 0.0 || (cast(double) cast(long) x) == x)
+            ? (cast(double) cast(long) x)
+            : (cast(double) cast(long) x) + 1.0;
+    }
+
+    float ceil(float x) {
+        return stdc.ceilf(x);
+    }
+
+    double ceil64(double x) {
+        return stdc.ceil(x);
+    }
+
+    float roundX(float x) {
+        return (x <= 0.0f)
+            ? cast(float) cast(int) (x - 0.5f)
+            : cast(float) cast(int) (x + 0.5f);
+    }
+
+    double roundX64(double x) {
+        return (x <= 0.0)
+            ? cast(double) cast(long) (x - 0.5)
+            : cast(double) cast(long) (x + 0.5);
+    }
+
+    float round(float x) {
+        return stdc.roundf(x);
+    }
+
+    double round64(double x) {
+        return stdc.round(x);
+    }
+
+    float sqrt(float x) {
+        return stdc.sqrtf(x);
+    }
+
+    double sqrt64(double x) {
+        return stdc.sqrt(x);
+    }
+
+    float sin(float x) {
+        return stdc.sinf(x);
+    }
+
+    double sin64(double x) {
+        return stdc.sin(x);
+    }
+
+    float cos(float x) {
+        return stdc.cosf(x);
+    }
+
+    double cos64(double x) {
+        return stdc.cos(x);
+    }
+
+    float tan(float x) {
+        return stdc.tanf(x);
+    }
+
+    double tan64(double x) {
+        return stdc.tan(x);
+    }
+
+    float asin(float x) {
+        return stdc.asinf(x);
+    }
+
+    double asin64(double x) {
+        return stdc.asin(x);
+    }
+
+    float acos(float x) {
+        return stdc.acosf(x);
+    }
+
+    double acos64(double x) {
+        return stdc.acos(x);
+    }
+
+    float atan(float x) {
+        return stdc.atanf(x);
+    }
+
+    double atan64(double x) {
+        return stdc.atan(x);
+    }
+
+    float lerp(float from, float to, float weight) {
+        return from + (to - from) * weight;
+    }
+
+    double lerp64(double from, double to, double weight) {
+        return from + (to - from) * weight;
+    }
+
+    Vec2 lerp(Vec2 from, Vec2 to, float weight) {
+        return Vec2(
+            lerp(from.x, to.x, weight),
+            lerp(from.y, to.y, weight),
+        );
+    }
+
+    Vec3 lerp(Vec3 from, Vec3 to, float weight) {
+        return Vec3(
+            lerp(from.x, to.x, weight),
+            lerp(from.y, to.y, weight),
+            lerp(from.z, to.z, weight),
+        );
+    }
+
+    Vec4 lerp(Vec4 from, Vec4 to, float weight) {
+        return Vec4(
+            lerp(from.x, to.x, weight),
+            lerp(from.y, to.y, weight),
+            lerp(from.z, to.z, weight),
+            lerp(from.w, to.w, weight),
+        );
+    }
+
+    DVec2 lerp(DVec2 from, DVec2 to, double weight) {
+        return DVec2(
+            lerp64(from.x, to.x, weight),
+            lerp64(from.y, to.y, weight),
+        );
+    }
+
+    DVec3 lerp(DVec3 from, DVec3 to, double weight) {
+        return DVec3(
+            lerp64(from.x, to.x, weight),
+            lerp64(from.y, to.y, weight),
+            lerp64(from.z, to.z, weight),
+        );
+    }
+
+    DVec4 lerp(DVec4 from, DVec4 to, double weight) {
+        return DVec4(
+            lerp64(from.x, to.x, weight),
+            lerp64(from.y, to.y, weight),
+            lerp64(from.z, to.z, weight),
+            lerp64(from.w, to.w, weight),
+        );
+    }
+
+    float smoothstep(float from, float to, float weight) {
+        auto v = weight * weight * (3.0f - 2.0f * weight);
+        return (to * v) + (from * (1.0f - v));
+    }
+
+    double smoothstep64(double from, double to, double weight) {
+        auto v = weight * weight * (3.0 - 2.0 * weight);
+        return (to * v) + (from * (1.0 - v));
+    }
+
+    float smootherstep(float from, float to, float weight) {
+        auto v = weight * weight * weight * (weight * (weight * 6.0f - 15.0f) + 10.0f);
+        return (to * v) + (from * (1.0f - v));
+    }
+
+    double smootherstep64(double from, double to, double weight) {
+        auto v = weight * weight * weight * (weight * (weight * 6.0 - 15.0) + 10.0);
+        return (to * v) + (from * (1.0 - v));
+    }
+
+    float easeLinear(float x) {
+        return x;
+    }
+
+    float easeInSine(float x) {
+        return 1.0f - cos((x * pi) / 2.0f);
+    }
+
+    float easeOutSine(float x) {
+        return sin((x * pi) / 2.0f);
+    }
+
+    float easeInOutSine(float x) {
+        return -(cos(pi * x) - 1.0f) / 2.0f;
+    }
+
+    float easeInCubic(float x) {
+        return x * x * x;
+    }
+
+    float easeOutCubic(float x) {
+        return 1.0f - pow(1.0f - x, 3.0f);
+    }
+
+    float easeInOutCubic(float x) {
+        return x < 0.5f ? 4.0f * x * x * x : 1.0f - pow(-2.0f * x + 2.0f, 3.0f) / 2.0f;
+    }
+
+    float easeInQuint(float x) {
+        return x * x * x * x * x;
+    }
+
+    float easeOutQuint(float x) {
+        return 1.0f - pow(1.0f - x, 5.0f);
+    }
+
+    float easeInOutQuint(float x) {
+        return x < 0.5f ? 16.0f * x * x * x * x * x : 1.0f - pow(-2.0f * x + 2.0f, 5.0f) / 2.0f;
+    }
+
+    float easeInCirc(float x) {
+        return 1.0f - sqrt(1.0f - pow(x, 2.0f));
+    }
+
+    float easeOutCirc(float x) {
+        return sqrt(1.0f - pow(x - 1.0f, 2.0f));
+    }
+
+    float easeInOutCirc(float x) {
+        return x < 0.5f
+            ? (1.0f - sqrt(1.0f - pow(2.0f * x, 2.0f))) / 2.0f
+            : (sqrt(1.0f - pow(-2.0f * x + 2.0f, 2.0f)) + 1.0f) / 2.0f;
+    }
+
+    float easeInElastic(float x) {
+        enum c4 = (2.0f * pi) / 3.0f;
+
+        return x == 0.0f
+            ? 0.0f
+            : x == 1.0f
+            ? 1.0f
+            : -pow(2.0f, 10.0f * x - 10.0f) * sin((x * 10.0f - 10.75f) * c4);
+    }
+
+    float easeOutElastic(float x) {
+        enum c4 = (2.0f * pi) / 3.0f;
+
+        return x == 0.0f
+            ? 0.0f
+            : x == 1.0f
+            ? 1.0f
+            : pow(2.0f, -10.0f * x) * sin((x * 10.0f - 0.75f) * c4) + 1.0f;
+    }
+
+    float easeInOutElastic(float x) {
+        enum c5 = (2.0f * pi) / 4.5f;
+
+        return x == 0.0f
+            ? 0.0f
+            : x == 1.0f
+            ? 1.0f
+            : x < 0.5f
+            ? -(pow(2.0f, 20.0f * x - 10.0f) * sin((20.0f * x - 11.125f) * c5)) / 2.0f
+            : (pow(2.0f, -20.0f * x + 10.0f) * sin((20.0f * x - 11.125f) * c5)) / 2.0f + 1.0f;
+    }
+
+    float easeInQuad(float x) {
+        return x * x;
+    }
+
+    float easeOutQuad(float x) {
+        return 1.0f - (1.0f - x) * (1.0f - x);
+    }
+
+    float easeInOutQuad(float x) {
+        return x < 0.5f ? 2.0f * x * x : 1.0f - pow(-2.0f * x + 2.0f, 2.0f) / 2.0f;
+    }
+
+    float easeInQuart(float x) {
+        return x * x * x * x;
+    }
+
+    float easeOutQuart(float x) {
+        return 1.0f - pow(1.0f - x, 4.0f);
+    }
+
+    float easeInOutQuart(float x) {
+        return x < 0.5f ? 8.0f * x * x * x * x : 1.0f - pow(-2.0f * x + 2.0f, 4.0f) / 2.0f;
+    }
+
+    float easeInExpo(float x) {
+        return x == 0.0f ? 0.0f : pow(2.0f, 10.0f * x - 10.0f);
+    }
+
+    float easeOutExpo(float x) {
+        return x == 1.0f ? 1.0f : 1.0f - pow(2.0f, -10.0f * x);
+    }
+
+    float easeInOutExpo(float x) {
+        return x == 0.0f
+            ? 0.0f
+            : x == 1.0f
+            ? 1.0f
+            : x < 0.5f ? pow(2.0f, 20.0f * x - 10.0f) / 2.0f
+            : (2.0f - pow(2.0f, -20.0f * x + 10.0f)) / 2.0f;
+    }
+
+    float easeInBack(float x) {
+        enum c1 = 1.70158f;
+        enum c3 = c1 + 1.0f;
+
+        return c3 * x * x * x - c1 * x * x;
+    }
+
+    float easeOutBack(float x) {
+        enum c1 = 1.70158f;
+        enum c3 = c1 + 1.0f;
+
+        return 1.0f + c3 * pow(x - 1.0f, 3.0f) + c1 * pow(x - 1.0f, 2.0f);
+    }
+
+    float easeInOutBack(float x) {
+        enum c1 = 1.70158f;
+        enum c2 = c1 * 1.525f;
+
+        return x < 0.5f
+            ? (pow(2.0f * x, 2.0f) * ((c2 + 1.0f) * 2.0f * x - c2)) / 2.0f
+            : (pow(2.0f * x - 2.0f, 2.0f) * ((c2 + 1.0f) * (x * 2.0f - 2.0f) + c2) + 2.0f) / 2.0f;
+    }
+
+    float easeInBounce(float x) {
+        return 1.0f - easeOutBounce(1.0f - x);
+    }
+
+    float easeOutBounce(float x) {
+        enum n1 = 7.5625f;
+        enum d1 = 2.75f;
+
+        return (x < 1.0f / d1)
+            ? n1 * x * x
+            : (x < 2.0f / d1)
+            ? n1 * (x -= 1.5f / d1) * x + 0.75f
+            : (x < 2.5f / d1)
+            ? n1 * (x -= 2.25f / d1) * x + 0.9375f
+            : n1 * (x -= 2.625f / d1) * x + 0.984375f;
+    }
+
+    float easeInOutBounce(float x) {
+        return x < 0.5f
+            ? (1.0f - easeOutBounce(1.0f - 2.0f * x)) / 2.0f
+            : (1.0f + easeOutBounce(2.0f * x - 1.0f)) / 2.0f;
+    }
+
+    EaseFunc ease(Ease type) {
+        final switch (type) {
+            case Ease.linear: return &easeLinear;
+            case Ease.inSine: return &easeInSine;
+            case Ease.outSine: return &easeOutSine;
+            case Ease.inOutSine: return &easeInOutSine;
+            case Ease.inCubic: return &easeInCubic;
+            case Ease.outCubic: return &easeOutCubic;
+            case Ease.inOutCubic: return &easeInOutCubic;
+            case Ease.inQuint: return &easeInQuint;
+            case Ease.outQuint: return &easeOutQuint;
+            case Ease.inOutQuint: return &easeInOutQuint;
+            case Ease.inCirc: return &easeInCirc;
+            case Ease.outCirc: return &easeOutCirc;
+            case Ease.inOutCirc: return &easeInOutCirc;
+            case Ease.inElastic: return &easeInElastic;
+            case Ease.outElastic: return &easeOutElastic;
+            case Ease.inOutElastic: return &easeInOutElastic;
+            case Ease.inQuad: return &easeInQuad;
+            case Ease.outQuad: return &easeOutQuad;
+            case Ease.inOutQuad: return &easeInOutQuad;
+            case Ease.inQuart: return &easeInQuart;
+            case Ease.outQuart: return &easeOutQuart;
+            case Ease.inOutQuart: return &easeInOutQuart;
+            case Ease.inExpo: return &easeInExpo;
+            case Ease.outExpo: return &easeOutExpo;
+            case Ease.inOutExpo: return &easeInOutExpo;
+            case Ease.inBack: return &easeInBack;
+            case Ease.outBack: return &easeOutBack;
+            case Ease.inOutBack: return &easeInOutBack;
+            case Ease.inBounce: return &easeInBounce;
+            case Ease.outBounce: return &easeOutBounce;
+            case Ease.inOutBounce: return &easeInOutBounce;
+        }
+    }
+
+    bool fequals(float a, float b, float localEpsilon = epsilon) {
+        return abs(a - b) < localEpsilon;
+    }
+
+    bool fequals64(double a, double b, double localEpsilon = epsilon) {
+        return abs(a - b) < localEpsilon;
+    }
+
+    bool fequals(Vec2 a, Vec2 b, float localEpsilon = epsilon) {
+        return fequals(a.x, b.x, localEpsilon) && fequals(a.y, b.y, localEpsilon);
+    }
+
+    bool fequals(Vec3 a, Vec3 b, float localEpsilon = epsilon) {
+        return fequals(a.x, b.x, localEpsilon) && fequals(a.y, b.y, localEpsilon) && fequals(a.z, b.z, localEpsilon);
+    }
+
+    bool fequals(Vec4 a, Vec4 b, float localEpsilon = epsilon) {
+        return fequals(a.x, b.x, localEpsilon) && fequals(a.y, b.y, localEpsilon) && fequals(a.z, b.z, localEpsilon) && fequals(a.w, b.w, localEpsilon);
+    }
+
+    bool fequals(DVec2 a, DVec2 b, double localEpsilon = epsilon) {
+        return fequals(a.x, b.x, localEpsilon) && fequals(a.y, b.y, localEpsilon);
+    }
+
+    bool fequals(DVec3 a, DVec3 b, double localEpsilon = epsilon) {
+        return fequals(a.x, b.x, localEpsilon) && fequals(a.y, b.y, localEpsilon) && fequals(a.z, b.z, localEpsilon);
+    }
+
+    bool fequals(DVec4 a, DVec4 b, double localEpsilon = epsilon) {
+        return fequals(a.x, b.x, localEpsilon) && fequals(a.y, b.y, localEpsilon) && fequals(a.z, b.z, localEpsilon) && fequals(a.w, b.w, localEpsilon);
+    }
+
+    float toRadians(float degrees) {
+        return degrees * pi180;
+    }
+
+    double toRadians64(double degrees) {
+        return degrees * pi180;
+    }
+
+    float toDegrees(float radians) {
+        return radians * dpi180;
+    }
+
+    double toDegrees64(double radians) {
+        return radians * dpi180;
+    }
+
+    Rgba toRgb(uint rgb) {
+        return Rgba(
+            (rgb & 0xFF0000) >> 16,
+            (rgb & 0xFF00) >> 8,
+            (rgb & 0xFF),
+        );
+    }
+
+    Rgba toRgba(uint rgba) {
+        return Rgba(
+            (rgba & 0xFF000000) >> 24,
+            (rgba & 0xFF0000) >> 16,
+            (rgba & 0xFF00) >> 8,
+            (rgba & 0xFF),
+        );
+    }
+
+    Rgba toRgba(Vec3 vec) {
+        return Rgba(
+            cast(ubyte) clamp(vec.x, 0.0f, 255.0f),
+            cast(ubyte) clamp(vec.y, 0.0f, 255.0f),
+            cast(ubyte) clamp(vec.z, 0.0f, 255.0f),
+            255,
+        );
+    }
+
+    Rgba toRgba(Vec4 vec) {
+        return Rgba(
+            cast(ubyte) clamp(vec.x, 0.0f, 255.0f),
+            cast(ubyte) clamp(vec.y, 0.0f, 255.0f),
+            cast(ubyte) clamp(vec.z, 0.0f, 255.0f),
+            cast(ubyte) clamp(vec.w, 0.0f, 255.0f),
+        );
+    }
+
+    Rgba toRgba(IStr str) {
+        auto startsWithSymbol = str.length == 0 ? false : str[0] == '#';
+        auto isRgb = str.length == 6 + startsWithSymbol;
+        auto isRgba = str.length == 8 + startsWithSymbol;
+        if (!isRgb && !isRgba) return blank;
+        uint hex = 0;
+        foreach (c; str[startsWithSymbol .. $]) {
+            uint digit = 0;
+            if (c >= '0' && c <= '9') {
+                digit = cast(uint) (c - '0');
+            } else if (c >= 'a' && c <= 'f') {
+                digit = cast(uint) (10 + (c - 'a'));
+            } else if (c >= 'A' && c <= 'F') {
+                digit = cast(uint) (10 + (c - 'A'));
+            } else {
+                return blank;
+            }
+            hex = (hex << 4) | digit;
+        }
+        if (isRgb) return hex.toRgb();
+        return hex.toRgba();
+    }
+
+    alias toColor = toRgba;
+
+    IVec2 toIVec(Vec2 vec) {
+        return IVec2(cast(int) vec.x, cast(int) vec.y);
+    }
+
+    IVec3 toIVec(Vec3 vec) {
+        return IVec3(cast(int) vec.x, cast(int) vec.y, cast(int) vec.z);
+    }
+
+    IVec4 toIVec(Vec4 vec) {
+        return IVec4(cast(int) vec.x, cast(int) vec.y, cast(int) vec.z, cast(int) vec.w);
+    }
+
+    Vec2 toVec(IVec2 vec) {
+        return Vec2(vec.x, vec.y);
+    }
+
+    Vec3 toVec(IVec3 vec) {
+        return Vec3(vec.x, vec.y, vec.z);
+    }
+
+    Vec4 toVec(IVec4 vec) {
+        return Vec4(vec.x, vec.y, vec.z, vec.w);
+    }
+
+    Vec4 toVec(Rgba color) {
+        return Vec4(color.r, color.g, color.b, color.a);
+    }
+
+    IRect toIRect(Rect rect) {
+        return IRect(rect.position.toIVec(), rect.size.toIVec());
+    }
+
+    Rect toRect(IRect rect) {
+        return Rect(rect.position.toVec(), rect.size.toVec());
+    }
+
+    float moveToState(float from, bool to, float delta) {
+        return to ? min(1.0f, from + delta) : max(0.0f, from - delta);
+    }
+
+    float moveToState64(double from, bool to, double delta) {
+        return to ? min(1.0, from + delta) : max(0.0, from - delta);
+    }
+
+    float followState(ref float weight, bool target, float speed) {
+        weight = weight.moveToState(target, speed);
+        return weight;
+    }
+
+    double followState64(ref double weight, bool target, double speed) {
+        weight = weight.moveToState64(target, speed);
+        return weight;
+    }
+
+    float moveTo(float from, float to, float delta) {
+        return (abs(to - from) > abs(delta))
+            ? from + sign(to - from) * delta
+            : to;
+    }
+
+    float moveTo64(double from, double to, double delta) {
+        return (abs(to - from) > abs(delta))
+            ? from + sign(to - from) * delta
+            : to;
+    }
+
+    Vec2 moveTo(Vec2 from, Vec2 to, Vec2 delta) {
+        Vec2 result = void;
+        auto offset = from.directionTo(to) * delta;
+        if (abs(to.x - from.x) > abs(offset.x)) result.x = from.x + offset.x;
+        else result.x = to.x;
+        if (abs(to.y - from.y) > abs(offset.y)) result.y = from.y + offset.y;
+        else result.y = to.y;
+        return result;
+    }
+
+    Vec3 moveTo(Vec3 from, Vec3 to, Vec3 delta) {
+        Vec3 result = void;
+        auto offset = from.directionTo(to) * delta;
+        if (abs(to.x - from.x) > abs(offset.x)) result.x = from.x + offset.x;
+        else result.x = to.x;
+        if (abs(to.y - from.y) > abs(offset.y)) result.y = from.y + offset.y;
+        else result.y = to.y;
+        if (abs(to.z - from.z) > abs(offset.z)) result.z = from.z + offset.z;
+        else result.z = to.z;
+        return result;
+    }
+
+    Vec4 moveTo(Vec4 from, Vec4 to, Vec4 delta) {
+        Vec4 result = void;
+        auto offset = from.directionTo(to) * delta;
+        if (abs(to.x - from.x) > abs(offset.x)) result.x = from.x + offset.x;
+        else result.x = to.x;
+        if (abs(to.y - from.y) > abs(offset.y)) result.y = from.y + offset.y;
+        else result.y = to.y;
+        if (abs(to.z - from.z) > abs(offset.z)) result.z = from.z + offset.z;
+        else result.z = to.z;
+        if (abs(to.w - from.w) > abs(offset.w)) result.w = from.w + offset.w;
+        else result.w = to.w;
+        return result;
+    }
+
+    DVec2 moveTo(DVec2 from, DVec2 to, DVec2 delta) {
+        DVec2 result = void;
+        auto offset = from.directionTo(to) * delta;
+        if (abs(to.x - from.x) > abs(offset.x)) result.x = from.x + offset.x;
+        else result.x = to.x;
+        if (abs(to.y - from.y) > abs(offset.y)) result.y = from.y + offset.y;
+        else result.y = to.y;
+        return result;
+    }
+
+    DVec3 moveTo(DVec3 from, DVec3 to, DVec3 delta) {
+        DVec3 result = void;
+        auto offset = from.directionTo(to) * delta;
+        if (abs(to.x - from.x) > abs(offset.x)) result.x = from.x + offset.x;
+        else result.x = to.x;
+        if (abs(to.y - from.y) > abs(offset.y)) result.y = from.y + offset.y;
+        else result.y = to.y;
+        if (abs(to.z - from.z) > abs(offset.z)) result.z = from.z + offset.z;
+        else result.z = to.z;
+        return result;
+    }
+
+    DVec4 moveTo(DVec4 from, DVec4 to, DVec4 delta) {
+        DVec4 result = void;
+        auto offset = from.directionTo(to) * delta;
+        if (abs(to.x - from.x) > abs(offset.x)) result.x = from.x + offset.x;
+        else result.x = to.x;
+        if (abs(to.y - from.y) > abs(offset.y)) result.y = from.y + offset.y;
+        else result.y = to.y;
+        if (abs(to.z - from.z) > abs(offset.z)) result.z = from.z + offset.z;
+        else result.z = to.z;
+        if (abs(to.w - from.w) > abs(offset.w)) result.w = from.w + offset.w;
+        else result.w = to.w;
+        return result;
+    }
+
+    float moveToWithSlowdown(float from, float to, float delta, float slowdown) {
+        if (from.fequals(to)) return to;
+        auto target = ((from * (slowdown - 1.0f)) + to) / slowdown;
+        return from + (target - from) * delta;
+    }
+
+    float moveToWithSlowdown64(double from, double to, double delta, double slowdown) {
+        if (from.fequals64(to)) return to;
+        auto target = ((from * (slowdown - 1.0)) + to) / slowdown;
+        return from + (target - from) * delta;
+    }
+
+    Vec2 moveToWithSlowdown(Vec2 from, Vec2 to, Vec2 delta, float slowdown) {
+        return Vec2(
+            moveToWithSlowdown(from.x, to.x, delta.x, slowdown),
+            moveToWithSlowdown(from.y, to.y, delta.y, slowdown),
+        );
+    }
+
+    Vec3 moveToWithSlowdown(Vec3 from, Vec3 to, Vec3 delta, float slowdown) {
+        return Vec3(
+            moveToWithSlowdown(from.x, to.x, delta.x, slowdown),
+            moveToWithSlowdown(from.y, to.y, delta.y, slowdown),
+            moveToWithSlowdown(from.z, to.z, delta.z, slowdown),
+        );
+    }
+
+    Vec4 moveToWithSlowdown(Vec4 from, Vec4 to, Vec4 delta, float slowdown) {
+        return Vec4(
+            moveToWithSlowdown(from.x, to.x, delta.x, slowdown),
+            moveToWithSlowdown(from.y, to.y, delta.y, slowdown),
+            moveToWithSlowdown(from.z, to.z, delta.z, slowdown),
+            moveToWithSlowdown(from.w, to.w, delta.w, slowdown),
+        );
+    }
+
+    DVec2 moveToWithSlowdown(DVec2 from, DVec2 to, DVec2 delta, double slowdown) {
+        return DVec2(
+            moveToWithSlowdown64(from.x, to.x, delta.x, slowdown),
+            moveToWithSlowdown64(from.y, to.y, delta.y, slowdown),
+        );
+    }
+
+    DVec3 moveToWithSlowdown(DVec3 from, DVec3 to, DVec3 delta, double slowdown) {
+        return DVec3(
+            moveToWithSlowdown64(from.x, to.x, delta.x, slowdown),
+            moveToWithSlowdown64(from.y, to.y, delta.y, slowdown),
+            moveToWithSlowdown64(from.z, to.z, delta.z, slowdown),
+        );
+    }
+
+    DVec4 moveToWithSlowdown(DVec4 from, DVec4 to, DVec4 delta, double slowdown) {
+        return DVec4(
+            moveToWithSlowdown64(from.x, to.x, delta.x, slowdown),
+            moveToWithSlowdown64(from.y, to.y, delta.y, slowdown),
+            moveToWithSlowdown64(from.z, to.z, delta.z, slowdown),
+            moveToWithSlowdown64(from.w, to.w, delta.w, slowdown),
+        );
+    }
 }
 
 // Function test.
 unittest {
+    assert(sign(-69) == -1);
+    assert(sign(0) == 0);
+    assert(sign(420) == 1);
+    assert(sign(float.nan) == 0);
+
     assert(min3(6, 9, 4) == 4);
     assert(max3(6, 9, 4) == 9);
     assert(min4(6, 9, 4, 20) == 4);

@@ -1,12 +1,14 @@
 // ---
-// Copyright 2024 Alexandros F. G. Kapretsos
+// Copyright 2025 Alexandros F. G. Kapretsos
 // SPDX-License-Identifier: MIT
 // Email: alexandroskapretsos@gmail.com
 // Project: https://github.com/Kapendev/parin
-// Version: v0.0.44
 // ---
 
+// TODO: Needs cleaning!!! I changed how the world data is stored. Turned 2 arrays into 1. The API is the same.
 // TODO: Update all the doc comments here.
+// TODO: Could have a simpler layer system that is just a number check like `layer1 == later2`.
+// TODO: Should maybe create an actor and resolve the collisions at that position. Right now it only resolves when moving.
 // TODO: Work on BoxMover acceleration. It's not good right now, but works.
 // TODO: Add one-way collision support for moving walls.
 // NOTE: The code works, but it's  super experimental and will change in the future!
@@ -20,41 +22,26 @@ import joka.math;
 import joka.types;
 import parin.engine;
 
-@safe @nogc nothrow:
+@safe nothrow:
 
-deprecated("Every name starts with `Box` now.") {
-    alias BaseBoxId        = BoxId;
-    alias BaseBoxFlags     = BoxFlags;
-    alias WallBoxId        = BoxId;
-    alias WallBoxFlags     = BoxFlags;
-    alias ActorBoxId       = BoxId;
-    alias ActorBoxFlags    = BoxFlags;
-    alias RideSide         = OneWaySide;
-    alias OneWaySide       = BoxSide;
+enum boxNoneId        = 0;
+enum boxUnionTypeBit  = 1 << 31;
+enum boxErrorMessage  = "Box is invalid or was never assigned.";
 
-    enum boxPassableFlag   = 0x1;
-    enum boxRidingFlag     = 0x2;
-    enum wallBoxTag        = 0;
-    enum actorBoxTag       = 1;
-    enum boxTagBit         = 1 << 31;
-
-    alias WallBoxProperties = BoxProperties;
-    alias ActorBoxProperties = BoxProperties;
-}
-
-alias BoxFlags           = uint;
-alias BoxWallFlags       = BoxFlags;
-alias BoxActorFlags      = BoxFlags;
-alias BoxId              = uint;
-alias BoxWallId          = BoxId;
+alias Box                = IRect;
+alias BoxId              = ushort;
+alias BoxIdPair          = GVec2!BoxId;
+alias BoxFlags           = ushort;
 alias BoxActorId         = BoxId;
+alias BoxActorIdPair     = BoxIdPair;
+alias BoxActorFlags      = BoxFlags;
+alias BoxWallId          = BoxId;
+alias BoxWallIdPair      = BoxIdPair;
+alias BoxWallFlags       = BoxFlags;
+
 alias BoxUnionId         = BoxId;
 alias BoxUnionIdGroup    = FixedList!(BoxUnionId, 254);
-alias BoxWallProperties  = BoxProperties;
-alias BoxActorProperties = BoxProperties;
-
-enum boxUnionTypeBit  = 1 << 31;
-enum boxErrorMessage = "Box is invalid or was never assigned.";
+alias BoxIdBuffer        = FixedList!(BoxId, 220);
 
 enum BoxUnionType : ubyte {
     wall  = 0x0,
@@ -81,6 +68,11 @@ struct BoxProperties {
     BoxSide side;
 }
 
+struct BoxData {
+    Box area;
+    BoxProperties properties;
+}
+
 struct BoxMover {
     Vec2 direction;
     Vec2 velocity;
@@ -91,7 +83,7 @@ struct BoxMover {
     float gravityFallFactor = 0.7f;
     float decelerationFactor = 0.3f;
 
-    @safe @nogc nothrow:
+    @safe nothrow @nogc:
 
     this(float speed, float acceleration, float gravity = 0.0f, float jump = 0.0f) {
         this.speed = speed;
@@ -161,82 +153,94 @@ struct BoxMover {
 }
 
 struct BoxWorld {
-    List!IRect walls;
-    List!IRect actors;
-    List!BoxWallProperties wallsProperties;
-    List!BoxActorProperties actorsProperties;
-    List!BoxActorId wallIdsBuffer;
-    List!BoxActorId actorIdsBuffer;
-    List!BoxActorId squishedIdsBuffer;
+    List!BoxData walls;
+    List!BoxData actors;
     Grid!BoxUnionIdGroup grid;
+    BoxIdBuffer collisionIdsBuffer;
+    BoxIdBuffer squishedIdsBuffer;
     int gridTileWidth;
     int gridTileHeight;
 
-    @safe @nogc nothrow:
+    @safe nothrow:
 
-    BoxWallId appendWall(IRect box, BoxSide side = BoxSide.none) {
-        walls.append(box);
-        wallsProperties.append(BoxProperties());
-        wallsProperties[$ - 1].side = side;
+    this(Sz capacity, IStr file = __FILE__, Sz line = __LINE__) {
+        reserve(capacity, file, line);
+    }
+
+    alias appendWall = pushWall;
+
+    BoxWallId pushWall(Box box, BoxSide side = BoxSide.none, IStr file = __FILE__, Sz line = __LINE__) {
+        auto data = BoxData(box, BoxProperties());
+        data.properties.side = side;
+        walls.push(data, file, line);
         auto id = cast(BoxId) walls.length;
-        if (grid.length) {
+        if (grid.length != 0) {
             auto point = getGridPoint(box);
             if (isGridPointValid(point)) grid[point.y, point.x].append(id & ~boxUnionTypeBit);
         }
         return id;
     }
 
-    BoxActorId appendActor(IRect box, BoxSide side = BoxSide.none) {
-        actors.append(box);
-        actorsProperties.append(BoxProperties());
-        actorsProperties[$ - 1].side = side;
+    alias appendActor = pushActor;
+
+    BoxActorId pushActor(Box box, BoxSide side = BoxSide.none, IStr file = __FILE__, Sz line = __LINE__) {
+        auto data = BoxData(box, BoxProperties());
+        data.properties.side = side;
+        actors.push(data, file, line);
         auto id = cast(BoxId) actors.length;
-        if (grid.length) {
+        if (grid.length != 0) {
             auto point = getGridPoint(box);
-            if (isGridPointValid(point)) grid[point.y, point.x].append(id | boxUnionTypeBit);
+            if (isGridPointValid(point)) grid[point.y, point.x].append(cast(BoxUnionId) (id | boxUnionTypeBit));
         }
         return id;
     }
 
-    Fault parseWalls(IStr csv, int tileWidth, int tileHeight) {
-        walls.clear();
+    Fault parseWallsCsv(IStr csv, int tileWidth, int tileHeight, IStr file = __FILE__, Sz line = __LINE__) {
+        clearWalls();
         if (csv.length == 0) return Fault.invalid;
         auto rowCount = 0;
         auto colCount = 0;
         while (csv.length != 0) {
             rowCount += 1;
             colCount = 0;
-            auto line = csv.skipLine();
-            while (line.length != 0) {
+            auto csvLine = csv.skipLine();
+            while (csvLine.length != 0) {
                 colCount += 1;
-                auto tile = line.skipValue(',').toSigned();
+                auto tile = csvLine.skipValue(',').toSigned();
                 if (tile.isNone) {
                     walls.clear();
                     return Fault.invalid;
                 }
-                if (tile.value <= -1) continue;
-                appendWall(IRect((colCount - 1) * tileWidth, (rowCount - 1) * tileHeight, tileWidth, tileHeight));
+                if (tile.xx <= -1) continue;
+                pushWall(Box((colCount - 1) * tileWidth, (rowCount - 1) * tileHeight, tileWidth, tileHeight), BoxSide.none, file, line);
             }
         }
         return Fault.none;
     }
 
-    void enableGrid(Sz rowCount, Sz colCount, int tileWidth, int tileHeight) {
+    void reserve(Sz capacity, IStr file = __FILE__, Sz line = __LINE__) {
+        walls.reserve(capacity, file, line);
+        actors.reserve(capacity, file, line);
+    }
+
+    void enableGrid(Sz rowCount, Sz colCount, int tileWidth, int tileHeight, IStr file = __FILE__, Sz line = __LINE__) {
         gridTileWidth = tileWidth;
         gridTileHeight = tileHeight;
-        grid.resizeBlank(rowCount, colCount);
+        grid.resizeBlank(rowCount, colCount, file, line);
         foreach (ref group; grid) group.clear();
         foreach (i, wall; walls) {
             auto id = cast(BoxId) (i + 1);
-            auto point = getGridPoint(wall);
+            auto point = getGridPoint(wall.area);
             if (isGridPointValid(point)) grid[point.y, point.x].append(id & ~boxUnionTypeBit);
         }
         foreach (i, actor; actors) {
             auto id = cast(BoxId) (i + 1);
-            auto point = getGridPoint(actor);
-            if (isGridPointValid(point)) grid[point.y, point.x].append(id | boxUnionTypeBit);
+            auto point = getGridPoint(actor.area);
+            if (isGridPointValid(point)) grid[point.y, point.x].append(cast(BoxUnionId) (id | boxUnionTypeBit));
         }
     }
+
+    @safe nothrow @nogc:
 
     void disableGrid() {
         gridTileWidth = 0;
@@ -244,11 +248,21 @@ struct BoxWorld {
         grid.clear();
     }
 
+    void clearWalls() {
+        if (grid.length != 0) return;
+        walls.clear();
+    }
+
+    void clearActors() {
+        if (grid.length != 0) return;
+        actors.clear();
+    }
+
     bool isGridPointValid(IVec2 point) {
         return point.x >= 0 && point.y >= 0 && grid.has(point.y, point.x);
     }
 
-    IVec2 getGridPoint(IRect box) {
+    IVec2 getGridPoint(Box box) {
         if (!grid.length) assert(0, "Can't get a grid point from a disabled grid.");
         return IVec2(
             box.position.x / gridTileWidth - (box.position.x < 0),
@@ -256,28 +270,29 @@ struct BoxWorld {
         );
     }
 
-    ref IRect getWall(BoxWallId id) {
-        if (id == 0) assert(0, boxErrorMessage);
-        return walls[id - 1];
+    ref Box getWall(BoxWallId id) {
+        if (id == boxNoneId) assert(0, boxErrorMessage);
+        return walls[id - 1].area;
     }
 
-    ref BoxWallProperties getWallProperties(BoxWallId id) {
-        if (id == 0) assert(0, boxErrorMessage);
-        return wallsProperties[id - 1];
+    ref BoxProperties getWallProperties(BoxWallId id) {
+        if (id == boxNoneId) assert(0, boxErrorMessage);
+        return walls[id - 1].properties;
     }
 
-    ref IRect getActor(BoxActorId id) {
-        if (id == 0) assert(0, boxErrorMessage);
-        return actors[id - 1];
+    ref Box getActor(BoxActorId id) {
+        if (id == boxNoneId) assert(0, boxErrorMessage);
+        return actors[id - 1].area;
     }
 
-    ref BoxActorProperties getActorProperties(BoxActorId id) {
-        if (id == 0) assert(0, boxErrorMessage);
-        return actorsProperties[id - 1];
+    ref BoxProperties getActorProperties(BoxActorId id) {
+        if (id == boxNoneId) assert(0, boxErrorMessage);
+        return actors[id - 1].properties;
     }
 
-    BoxWallId[] getWallCollisions(IRect box, bool canStopAtFirst = false) {
-        wallIdsBuffer.clear();
+    @trusted
+    BoxWallId[] getWallCollisions(Box box, bool canStopAtFirst = false) {
+        collisionIdsBuffer.clear();
         if (grid.length) {
             auto point = getGridPoint(box);
             foreach (y; -1 .. 2) { foreach (x; -1 .. 2) {
@@ -287,25 +302,39 @@ struct BoxWorld {
                     auto i = (taggedId & ~boxUnionTypeBit) - 1;
                     auto isActor = taggedId & boxUnionTypeBit;
                     if (isActor) continue;
-                    if (walls[i].hasIntersection(box) && ~wallsProperties[i].flags & BoxFlag.isPassable) {
-                        wallIdsBuffer.append(cast(BoxId) (i + 1));
-                        if (canStopAtFirst) return wallIdsBuffer[];
+                    if (walls[i].area.hasIntersection(box) && ~walls[i].properties.flags & BoxFlag.isPassable) {
+                        collisionIdsBuffer.push(cast(BoxId) (i + 1));
+                        if (canStopAtFirst) return collisionIdsBuffer[];
                     }
                 }
             }}
         } else {
             foreach (i, wall; walls) {
-                if (wall.hasIntersection(box) && ~wallsProperties[i].flags & BoxFlag.isPassable) {
-                    wallIdsBuffer.append(cast(BoxId) (i + 1));
-                    if (canStopAtFirst) return wallIdsBuffer[];
+                if (wall.area.hasIntersection(box) && ~wall.properties.flags & BoxFlag.isPassable) {
+                    collisionIdsBuffer.push(cast(BoxId) (i + 1));
+                    if (canStopAtFirst) return collisionIdsBuffer[];
                 }
             }
         }
-        return wallIdsBuffer[];
+        return collisionIdsBuffer[];
     }
 
-    BoxActorId[] getActorCollisions(IRect box, bool canStopAtFirst = false) {
-        actorIdsBuffer.clear();
+    BoxWallId hasWallCollision(Box box) {
+        auto boxes = getWallCollisions(box, true);
+        return boxes.length ? boxes[0] : 0;
+    }
+
+    BoxWallId hasWallCollision(BoxWallId id) {
+        return hasWallCollision(getWall(id));
+    }
+
+    BoxWallId hasWallCollision(BoxWallId id1, BoxWallId id2) {
+        return getWall(id1).hasIntersection(getWall(id2)) ? id2 : 0;
+    }
+
+    @trusted
+    BoxActorId[] getActorCollisions(Box box, bool canStopAtFirst = false) {
+        collisionIdsBuffer.clear();
         if (grid.length) {
             auto point = getGridPoint(box);
             foreach (y; -1 .. 2) { foreach (x; -1 .. 2) {
@@ -315,31 +344,34 @@ struct BoxWorld {
                     auto i = (taggedId & ~boxUnionTypeBit) - 1;
                     auto isWall = !(taggedId & boxUnionTypeBit);
                     if (isWall) continue;
-                    if (actors[i].hasIntersection(box) && ~actorsProperties[i].flags & BoxFlag.isPassable) {
-                        actorIdsBuffer.append(cast(BoxId) (i + 1));
-                        if (canStopAtFirst) return actorIdsBuffer[];
+                    if (actors[i].area.hasIntersection(box) && ~actors[i].properties.flags & BoxFlag.isPassable) {
+                        collisionIdsBuffer.push(cast(BoxId) (i + 1));
+                        if (canStopAtFirst) return collisionIdsBuffer[];
                     }
                 }
             }}
         } else {
             foreach (i, actor; actors) {
-                if (actor.hasIntersection(box) && ~actorsProperties[i].flags & BoxFlag.isPassable) {
-                    actorIdsBuffer.append(cast(BoxId) (i + 1));
-                    if (canStopAtFirst) return actorIdsBuffer[];
+                if (actor.area.hasIntersection(box) && ~actor.properties.flags & BoxFlag.isPassable) {
+                    collisionIdsBuffer.push(cast(BoxId) (i + 1));
+                    if (canStopAtFirst) return collisionIdsBuffer[];
                 }
             }
         }
-        return actorIdsBuffer[];
+        return collisionIdsBuffer[];
     }
 
-    BoxWallId hasWallCollision(IRect box) {
-        auto boxes = getWallCollisions(box, true);
-        return boxes.length ? boxes[0] : 0;
-    }
-
-    BoxActorId hasActorCollision(IRect box) {
+    BoxActorId hasActorCollision(Box box) {
         auto boxes = getActorCollisions(box, true);
         return boxes.length ? boxes[0] : 0;
+    }
+
+    BoxActorId hasActorCollision(BoxActorId id) {
+        return hasActorCollision(getActor(id));
+    }
+
+    BoxActorId hasActorCollision(BoxActorId id1, BoxActorId id2) {
+        return getActor(id1).hasIntersection(getActor(id2)) ? id2 : 0;
     }
 
     BoxWallId moveActorX(BoxActorId id, float amount) {
@@ -352,7 +384,7 @@ struct BoxWorld {
         int moveSign = move.sign();
         properties.remainder.x -= move;
         while (move != 0) {
-            auto tempBox = IRect(actor.position + IVec2(moveSign, 0), actor.size);
+            auto tempBox = Box(actor.position + IVec2(moveSign, 0), actor.size);
             auto wallId = hasWallCollision(tempBox);
             if (wallId) {
                 // One way stuff.
@@ -363,13 +395,13 @@ struct BoxWorld {
                         break;
                     case top:
                     case bottom:
-                        wallId = 0;
+                        wallId = boxNoneId;
                         break;
                     case left:
-                        if (wall.position.x < actor.position.x || wall.hasIntersection(*actor)) wallId = 0;
+                        if (wall.position.x < actor.position.x || wall.hasIntersection(*actor)) wallId = boxNoneId;
                         break;
                     case right:
-                        if (wall.position.x > actor.position.x || wall.hasIntersection(*actor)) wallId = 0;
+                        if (wall.position.x > actor.position.x || wall.hasIntersection(*actor)) wallId = boxNoneId;
                         break;
                 }
             }
@@ -394,7 +426,7 @@ struct BoxWorld {
                             }
                         }
                         if (isGridPointValid(newPoint)) {
-                            grid[newPoint.y, newPoint.x].append(id | boxUnionTypeBit);
+                            grid[newPoint.y, newPoint.x].append(cast(BoxUnionId) (id | boxUnionTypeBit));
                         }
                     }
                 } else {
@@ -428,7 +460,7 @@ struct BoxWorld {
         int moveSign = move.sign();
         properties.remainder.y -= move;
         while (move != 0) {
-            auto tempBox = IRect(actor.position + IVec2(0, moveSign), actor.size);
+            auto tempBox = Box(actor.position + IVec2(0, moveSign), actor.size);
             auto wallId = hasWallCollision(tempBox);
             if (wallId) {
                 // One way stuff.
@@ -439,13 +471,13 @@ struct BoxWorld {
                         break;
                     case left:
                     case right:
-                        wallId = 0;
+                        wallId = boxNoneId;
                         break;
                     case top:
-                        if (wall.position.y < actor.position.y || wall.hasIntersection(*actor)) wallId = 0;
+                        if (wall.position.y < actor.position.y || wall.hasIntersection(*actor)) wallId = boxNoneId;
                         break;
                     case bottom:
-                        if (wall.position.y > actor.position.y || wall.hasIntersection(*actor)) wallId = 0;
+                        if (wall.position.y > actor.position.y || wall.hasIntersection(*actor)) wallId = boxNoneId;
                         break;
                 }
             }
@@ -470,7 +502,7 @@ struct BoxWorld {
                             }
                         }
                         if (isGridPointValid(newPoint)) {
-                            grid[newPoint.y, newPoint.x].append(id | boxUnionTypeBit);
+                            grid[newPoint.y, newPoint.x].append(cast(BoxUnionId) (id | boxUnionTypeBit));
                         }
                     }
                 } else {
@@ -494,20 +526,20 @@ struct BoxWorld {
         return moveActorY(id, target - actor.position.y);
     }
 
-    IVec2 moveActor(BoxActorId id, Vec2 amount) {
-        auto result = IVec2();
+    BoxWallIdPair moveActor(BoxActorId id, Vec2 amount) {
+        auto result = BoxWallIdPair();
         result.x = cast(int) moveActorX(id, amount.x);
         result.y = cast(int) moveActorY(id, amount.y);
         return result;
     }
 
-    IVec2 moveActorTo(BoxActorId id, Vec2 to, Vec2 amount) {
+    BoxWallIdPair moveActorTo(BoxActorId id, Vec2 to, Vec2 amount) {
         auto actor = &getActor(id);
         auto target = moveTo(actor.position.toVec(), to.floor(), amount);
         return moveActor(id, target - actor.position.toVec());
     }
 
-    IVec2 moveActorToWithSlowdown(BoxActorId id, Vec2 to, Vec2 amount, float slowdown) {
+    BoxWallIdPair moveActorToWithSlowdown(BoxActorId id, Vec2 to, Vec2 amount, float slowdown) {
         auto actor = &getActor(id);
         auto target = moveToWithSlowdown(actor.position.toVec(), to.floor(), amount, slowdown);
         return moveActor(id, target - actor.position.toVec());
@@ -545,6 +577,7 @@ struct BoxWorld {
         return moveWallY(id, target - wall.position.y);
     }
 
+    @trusted
     BoxActorId[] moveWall(BoxWallId id, Vec2 amount) {
         auto wall = &getWall(id);
         auto properties = &getWallProperties(id);
@@ -554,10 +587,11 @@ struct BoxWorld {
         squishedIdsBuffer.clear();
         auto move = properties.remainder.round().toIVec();
         if (move.x != 0 || move.y != 0) {
-            foreach (i, ref actorProperties; actorsProperties) {
+            foreach (i, ref actorData; actors) {
+                auto actorProperties = &actorData.properties;
                 actorProperties.flags &= ~BoxFlag.isRiding;
                 if (!actorProperties.side || actorProperties.flags & BoxFlag.isPassable) continue;
-                auto rideBox = actors[i];
+                auto rideBox = actorData.area;
                 final switch (actorProperties.side) with (BoxSide) {
                     case none: break;
                     case top: rideBox.position.y += 1; break;
@@ -597,19 +631,19 @@ struct BoxWorld {
             if (~properties.flags & BoxFlag.isPassable) {
                 properties.flags |= BoxFlag.isPassable;
                 foreach (i, ref actor; actors) {
-                    if (actorsProperties[i].flags & BoxFlag.isPassable) continue;
-                    if (wall.hasIntersection(actor)) {
+                    if (actor.properties.flags & BoxFlag.isPassable) continue;
+                    if (wall.hasIntersection(actor.area)) {
                         // Push actor.
                         auto wallLeft = wall.position.x;
                         auto wallRight = wall.position.x + wall.size.x;
-                        auto actorLeft = actor.position.x;
-                        auto actorRight = actor.position.x + actor.size.x;
+                        auto actorLeft = actor.area.position.x;
+                        auto actorRight = actor.area.position.x + actor.area.size.x;
                         auto actorPushAmount = (move.x > 0) ? (wallRight - actorLeft) : (wallLeft - actorRight);
                         if (moveActorX(cast(BoxId) (i + 1), actorPushAmount)) {
                             // Squish actor.
-                            squishedIdsBuffer.append(cast(BoxId) (i + 1));
+                            squishedIdsBuffer.push(cast(BoxId) (i + 1));
                         }
-                    } else if (actorsProperties[i].flags & BoxFlag.isRiding) {
+                    } else if (actor.properties.flags & BoxFlag.isRiding) {
                         // Carry actor.
                         moveActorX(cast(BoxId) (i + 1), move.x);
                     }
@@ -645,19 +679,19 @@ struct BoxWorld {
             if (~properties.flags & BoxFlag.isPassable) {
                 properties.flags |= BoxFlag.isPassable;
                 foreach (i, ref actor; actors) {
-                    if (actorsProperties[i].flags & BoxFlag.isPassable) continue;
-                    if (wall.hasIntersection(actor)) {
+                    if (actor.properties.flags & BoxFlag.isPassable) continue;
+                    if (wall.hasIntersection(actor.area)) {
                         // Push actor.
                         auto wallTop = wall.position.y;
                         auto wallBottom = wall.position.y + wall.size.y;
-                        auto actorTop = actor.position.y;
-                        auto actorBottom = actor.position.y + actor.size.y;
+                        auto actorTop = actor.area.position.y;
+                        auto actorBottom = actor.area.position.y + actor.area.size.y;
                         auto actorPushAmount = (move.y > 0) ? (wallBottom - actorTop) : (wallTop - actorBottom);
                         if (moveActorY(cast(BoxId) (i + 1), actorPushAmount)) {
                             // Squish actor.
-                            squishedIdsBuffer.append(cast(BoxId) (i + 1));
+                            squishedIdsBuffer.push(cast(BoxId) (i + 1));
                         }
-                    } else if (actorsProperties[i].flags & BoxFlag.isRiding) {
+                    } else if (actor.properties.flags & BoxFlag.isRiding) {
                         // Carry actor.
                         moveActorY(cast(BoxId) (i + 1), move.y);
                     }
@@ -682,33 +716,29 @@ struct BoxWorld {
 
     void clear() {
         walls.clear();
-        wallsProperties.clear();
         actors.clear();
-        actorsProperties.clear();
         foreach (ref group; grid) group.clear();
     }
 
-    void reserve(Sz capacity) {
-        walls.reserve(capacity);
-        actors.reserve(capacity);
-        wallsProperties.reserve(capacity);
-        actorsProperties.reserve(capacity);
+    void free(IStr file = __FILE__, Sz line = __LINE__) {
+        walls.free(file, line);
+        actors.free(file, line);
+        grid.free(file, line);
+        collisionIdsBuffer.clear();
+        squishedIdsBuffer.clear();
+        gridTileWidth = 0;
+        gridTileHeight = 0;
     }
 
-    void free() {
-        walls.free();
-        actors.free();
-        wallsProperties.free();
-        actorsProperties.free();
-        wallIdsBuffer.free();
-        actorIdsBuffer.free();
-        squishedIdsBuffer.free();
-        grid.free();
-        this = BoxWorld();
+    void ignoreLeak() {
+        walls.ignoreLeak();
+        actors.ignoreLeak();
+        grid.ignoreLeak();
     }
 }
 
+@nogc
 void drawDebugBoxWorld(ref BoxWorld world) {
-    foreach (wall; world.walls) drawRect(wall.toRect(), brown.alpha(170));
-    foreach (actor; world.actors) drawRect(actor.toRect(), cyan.alpha(170));
+    foreach (ref wall; world.walls) drawRect(wall.area.toRect(), brown.alpha(170));
+    foreach (ref actor; world.actors) drawRect(actor.area.toRect(), cyan.alpha(170));
 }
