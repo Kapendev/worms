@@ -448,7 +448,7 @@ struct Game {
     bool             buttonsDone;
 }
 
-ref IRect getActor(BoxActorId id) {
+ref Box getActor(BoxActorId id) {
     return game.world.getActor(id);
 }
 
@@ -510,18 +510,18 @@ void prepareGame() {
     // Anyway...
     // I am setting the painting order here too because why not.
     // It depends also on the atlas position a bit. It's weird, I know. Works tho.
-    game.paintings.push(Painting(2, game.world.pushActor(IRect(10, 20))));
-    game.paintings.push(Painting(3, game.world.pushActor(IRect(10, 20))));
-    game.paintings.push(Painting(1, game.world.pushActor(IRect(10, 20))));
-    game.paintings.push(Painting(0, game.world.pushActor(IRect(10, 20))));
+    game.paintings.push(Painting(2, game.world.pushActor(Box(10, 20))));
+    game.paintings.push(Painting(3, game.world.pushActor(Box(10, 20))));
+    game.paintings.push(Painting(1, game.world.pushActor(Box(10, 20))));
+    game.paintings.push(Painting(0, game.world.pushActor(Box(10, 20))));
 
-    game.player.id = game.world.pushActor(IRect(114, 60, 4, 2));
-    game.hole.id = game.world.pushActor(IRect(73, 42, 13, 13));
-    game.ball.id = game.world.pushActor(IRect(30, 52, 4, 4));
-    game.wormsCounterArea.id = game.world.pushActor(IRect(100, 25, 43, 25));
-    game.bloodCounterArea1.id = game.world.pushActor(IRect(21, 28, 8, 8));
-    game.bloodCounterArea2.id = game.world.pushActor(IRect(21, 42, 8, 8));
-    game.door.id = game.world.pushActor(IRect(111, 24, 10, 4));
+    game.player.id = game.world.pushActor(Box(114, 60, 4, 2));
+    game.hole.id = game.world.pushActor(Box(73, 42, 13, 13));
+    game.ball.id = game.world.pushActor(Box(30, 52, 4, 4));
+    game.wormsCounterArea.id = game.world.pushActor(Box(100, 25, 43, 25));
+    game.bloodCounterArea1.id = game.world.pushActor(Box(21, 28, 8, 8));
+    game.bloodCounterArea2.id = game.world.pushActor(Box(21, 42, 8, 8));
+    game.door.id = game.world.pushActor(Box(111, 24, 10, 4));
 
     enum buttonCenter = IVec2(8 * 9 + 1, 69);
     enum buttonOffset = IVec2(21, 0);
@@ -553,7 +553,7 @@ void appendWorm() {
     worm.flipTimer.start();
     worm.directionTimer.start();
     worm.startHuntTimer();
-    worm.id = game.world.pushActor(IRect(77, 45, 4, 2));
+    worm.id = game.world.pushActor(Box(77, 45, 4, 2));
     worm.animationOffset = cast(ubyte) (randi % 255);
     worm.animationSpeed = cast(ubyte) (2 + randi % 4);
     game.worms.push(worm);
@@ -561,14 +561,14 @@ void appendWorm() {
 
 void appendButton(IVec2 position) {
     auto button = Button();
-    button.id = game.world.pushActor(IRect(position, 8, 6));
+    button.id = game.world.pushActor(Box(position, 8, 6));
     button.value = cast(int) game.buttons.length + 1;
     game.buttons.push(button);
 }
 
 void appendBlood(IVec2 position) {
     auto blood = Blood();
-    auto box = IRect(position + IVec2(-3, -2), 6, 5);
+    auto box = Box(position + IVec2(-3, -2), 6, 5);
     // TODO(Parin): Hack that resolves collision with bottom walls. Make library solution that does this when adding a new box.
     if (box.y >= 77) {
         foreach (wall; game.world.walls) {
