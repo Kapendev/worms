@@ -8,8 +8,8 @@
         "assets"
     ],
     "dependencies": {
-        "joka": {"path": "../joka"},
-        "parin": {"path": "../parin"}
+        "joka": "*",
+        "parin": "*",
     },
     "configurations": [
         {

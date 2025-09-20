@@ -1,4 +1,3 @@
-// TODO(Parin): `Timer` and other update stuff should throw an error if you try to do stuff without updating first.
 // TODO(Parin): `parin.platformer` could have a layer system.
 // TODO(Parin): `parin.platformer` could return `Rect` indead of `ref IRect`. This removes `toVec` from user code and could also include the hidden remainder.
 // TODO(Parin): `parin.platformer` should create an actor and resolve the collisions at that position. Right now it only resolves when moving.
@@ -231,7 +230,7 @@ struct Door {
                 game.isEnding = true;
                 game.fadingArea.y = gameHeight;
                 game.fadingTarget.y = -gameHeight * 1.5f;
-//                game.world.clearWalls(); TODO
+                game.world.clearWalls();
             }
             moveWorms(getActor(id).bottomPoint.toVec());
             if (!game.isEnding) if (!hackBool) appendWorm();
@@ -412,49 +411,48 @@ enum GameMode {
 }
 
 struct Game {
-    GameMode         mode;
-    TileMap          map;
-    BoxWorld         world;
-    Rect             fadingArea = Rect(0, gameHeight, gameSize);
-    Vec2             fadingTarget = Vec2(0, gameHeight);
-    Rgba             fadingColor = Pico8.black;
-    bool             oneFadeForTheEndBoys = false;
-    bool             isDebugging;
-    bool             isEnding;
-    bool             canHideHp;
-    bool             hasPlayerLeft;
-    Timer            outroTimer = Timer(4.2f);
-    Timer            finTimer = Timer(0.9f);
+    GameMode mode;
+    TileMap  map;
+    BoxWorld world;
+    Rect     fadingArea = Rect(0, gameHeight, gameSize);
+    Vec2     fadingTarget = Vec2(0, gameHeight);
+    Rgba     fadingColor = Pico8.black;
+    bool     oneFadeForTheEndBoys = false;
+    bool     isDebugging;
+    bool     isEnding;
+    bool     canHideHp;
+    bool     hasPlayerLeft;
+    Timer    outroTimer = Timer(4.2f);
+    Timer    finTimer = Timer(0.9f);
 
-    FixedList!(Painting, 4) paintings;
-    Player           player;
-    Hole             hole;
-    Door             door;
+    Array!(Painting, 4) paintings;
+    Player              player;
+    Hole                hole;
+    Door                door;
 
-    Ball             ball;
-    bool             ballDone;
+    Ball ball;
+    bool ballDone;
 
-    FixedList!(Blood, 8)       blood;
-    BloodCounterArea bloodCounterArea1;
-    BloodCounterArea bloodCounterArea2;
-    bool             bloodDone;
+    FixedList!(Blood, 8) blood;
+    BloodCounterArea     bloodCounterArea1;
+    BloodCounterArea     bloodCounterArea2;
+    bool                 bloodDone;
 
     List!Worm        worms;
     WormsCounterArea wormsCounterArea;
     bool             wormsDone;
 
-    FixedList!(Button, 3)  buttons;
-    NumberInput      buttonsInput;
-    bool             buttonsDone;
+    FixedList!(Button, 3) buttons;
+    NumberInput           buttonsInput;
+    bool                  buttonsDone;
 }
 
 ref Box getActor(BoxActorId id) {
     return game.world.getActor(id);
 }
 
-// TODO(Parin): Make a ID-ID collision thing.
 bool hasCollision(BoxActorId a, BoxActorId b) {
-    return getActor(a).hasIntersection(getActor(b));
+    return game.world.hasActorCollision(a, b) != 0;
 }
 
 void prepareGame() {
@@ -470,50 +468,32 @@ void prepareGame() {
 
     if (game == null) {
         game = jokaMake!Game();
-        game.world.reserve(512);
-        game.worms.reserve(512);
         game.ignoreLeak();
-        game.world.ignoreLeak();
-        game.worms.ignoreLeak();
         game.map.ignoreLeak();
+        game.world.reserve(512);
+        game.world.ignoreLeak();
+        game.worms.reserve(512);
+        game.worms.ignoreLeak();
     } else {
-        // NOTE(Joka): Make the arena allocator easier to use for existing types?
-        // Is an arena good for things like that? Don't know. I will review the code later.
-        // I do have a similar problem with the engine state too.
         game.map.clear();
         auto tempMap = game.map;
         game.world.clear();
         auto tempWorld = game.world;
-        game.paintings.clear();
-        auto tempPaintings = game.paintings;
-        game.blood.clear();
-        auto tempBlood = game.blood;
         game.worms.clear();
         auto tempWorms = game.worms;
-        game.buttons.clear();
-        auto tempButtons = game.buttons;
         *game = Game();
         game.map = tempMap;
         game.world = tempWorld;
-        game.paintings = tempPaintings;
-        game.blood = tempBlood;
         game.worms = tempWorms;
-        game.buttons = tempButtons;
     }
     stopSound(bgm);
     game.map.parseCsv(loadTempText("map.csv").getOr(), 8, 8);
     game.world.parseWallsCsv(loadTempText("map_walls.csv").getOr(), 8, 8);
 
-    // NOTE(Joka): Arrays of structs.
-    // This could be an array, but D likes to create type info for `struct[N]` types and WASM doesn't like that.
-    // Joka's `FixedList` could avoid this by using `ubyte[N * S]`, but yeah.
-    // Anyway...
-    // I am setting the painting order here too because why not.
-    // It depends also on the atlas position a bit. It's weird, I know. Works tho.
-    game.paintings.push(Painting(2, game.world.pushActor(Box(10, 20))));
-    game.paintings.push(Painting(3, game.world.pushActor(Box(10, 20))));
-    game.paintings.push(Painting(1, game.world.pushActor(Box(10, 20))));
-    game.paintings.push(Painting(0, game.world.pushActor(Box(10, 20))));
+    game.paintings[0] = (Painting(2, game.world.pushActor(Box(10, 20))));
+    game.paintings[1] = (Painting(3, game.world.pushActor(Box(10, 20))));
+    game.paintings[2] = (Painting(1, game.world.pushActor(Box(10, 20))));
+    game.paintings[3] = (Painting(0, game.world.pushActor(Box(10, 20))));
 
     game.player.id = game.world.pushActor(Box(114, 60, 4, 2));
     game.hole.id = game.world.pushActor(Box(73, 42, 13, 13));
