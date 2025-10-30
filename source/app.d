@@ -425,7 +425,7 @@ struct Game {
     Timer    outroTimer = Timer(4.2f);
     Timer    finTimer = Timer(0.9f);
 
-    Array!(Painting, 4) paintings;
+    StaticArray!(Painting, 4) paintings;
     Player              player;
     Hole                hole;
     Door                door;
@@ -457,9 +457,9 @@ bool hasCollision(BoxActorId a, BoxActorId b) {
 
 void prepareGame() {
     lockResolution(gameWidth, gameHeight);
-    freeManagedEngineResources();
-    setBackgroundColor(Pico8.lightGray);
-    setBorderColor(Pico8.lightGray);
+    freeAllResourceIds();
+    setWindowBackgroundColor(Pico8.lightGray);
+    setWindowBorderColor(Pico8.lightGray);
     walkSound = loadSound("audio/walk.wav", 2.51f, 0.38f, true, 1.18f);
     doorSound = loadSound("audio/door.wav", 0.44f, 1.00f, false, 1.18f);
     goodSound = loadSound("audio/good.wav", 0.92f, 1.00f, false, 1.18f);
@@ -467,12 +467,11 @@ void prepareGame() {
     atlas = loadTexture("atlas.png");
 
     if (game == null) {
-        game = jokaMake!Game();
-        game.ignoreLeak();
-        game.map.ignoreLeak();
+        game = jokaMake!Game().ignoreLeak();
         game.world.reserve(512);
-        game.world.ignoreLeak();
+        game.map.ignoreLeak();
         game.worms.reserve(512);
+        game.world.ignoreLeak();
         game.worms.ignoreLeak();
     } else {
         game.map.clear();
@@ -487,8 +486,8 @@ void prepareGame() {
         game.worms = tempWorms;
     }
     stopSound(bgm);
-    game.map.parseCsv(loadTempText("map.csv").getOr(), 8, 8);
-    game.world.parseWallsCsv(loadTempText("map_walls.csv").getOr(), 8, 8);
+    game.map.parseCsv(loadTempText("map.csv"), 8, 8);
+    game.world.parseWallsCsv(loadTempText("map_walls.csv"), 8, 8);
 
     game.paintings[0] = (Painting(2, game.world.pushActor(Box(10, 20))));
     game.paintings[1] = (Painting(3, game.world.pushActor(Box(10, 20))));
@@ -573,6 +572,7 @@ bool update(float dt) {
     auto o = DrawOptions();
     if (checkKeyboardShortcuts()) return true;
     game.fadingArea.position = game.fadingArea.position.moveToWithSlowdown(game.fadingTarget, Vec2(dt), 0.3f);
+
     // Update the world.
     with (GameMode) final switch (game.mode) {
         case intro:
@@ -602,11 +602,11 @@ bool update(float dt) {
             if (game.fadingArea.y <= 10 && !game.oneFadeForTheEndBoys && game.isEnding) {
                 game.oneFadeForTheEndBoys = true;
                 game.canHideHp = true;
-                game.map.parseCsv(loadTempText("end.csv").getOr(), 8, 8);
-                game.world.parseWallsCsv(loadTempText("end_walls.csv").getOr(), 8, 8);
+                game.map.parseCsv(loadTempText("end.csv"), 8, 8);
+                game.world.parseWallsCsv(loadTempText("end_walls.csv"), 8, 8);
                 getActor(game.player.id).position = IVec2(8 * 10 + 2, 8 * 3 + 4);
-                setBorderColor(Pico8.black);
-                setBackgroundColor(Pico8.black);
+                setWindowBorderColor(Pico8.black);
+                setWindowBackgroundColor(Pico8.black);
                 game.player.canAction = false;
             }
             game.player.canMove = !isFading;

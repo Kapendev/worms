@@ -4,12 +4,8 @@
     "description" : "A game made with Parin.",
     "license" : "proprietary",
     "name" : "game",
-    "stringImportPaths": [
-        "assets"
-    ],
     "dependencies": {
-        "joka": "*",
-        "parin": "*",
+        "parin": "*"
     },
     "configurations": [
         {
