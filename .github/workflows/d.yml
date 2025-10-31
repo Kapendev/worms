@@ -20,8 +20,10 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - uses: dlang-community/setup-dlang@4c99aa991ce7d19dd3064de0a4f2f6b2f152e2d7
-
+    - name: 'Install DMD'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y dmd
     - name: 'Build & Test'
       run: |
         dub build --config=default --compiler=dmd
