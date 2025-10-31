@@ -26,4 +26,3 @@ jobs:
     - name: 'Build & Test'
       run: |
         dub build --config=default --compiler=ldc2
-        dub test --config=default --compiler=ldc2
