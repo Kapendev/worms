@@ -22,8 +22,7 @@ jobs:
     - uses: actions/checkout@v4
     - name: 'Install DMD'
       run: |
-        sudo apt-get update
-        sudo apt-get install -y ldc
+        sudo apt-get install -y ldc dub
     - name: 'Build & Test'
       run: |
         dub build --config=default --compiler=ldc2
