@@ -23,8 +23,8 @@ jobs:
     - name: 'Install DMD'
       run: |
         sudo apt-get update
-        sudo apt-get install -y dmd
+        sudo apt-get install -y gdc
     - name: 'Build & Test'
       run: |
-        dub build --config=default --compiler=dmd
-        dub test --config=default --compiler=dmd
+        dub build --config=default --compiler=gdc
+        dub test --config=default --compiler=gdc
