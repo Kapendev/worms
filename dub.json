@@ -5,7 +5,7 @@
     "license" : "proprietary",
     "name" : "game",
     "dependencies": {
-        "parin": "*"
+        "parin": "~main"
     },
     "configurations": [
         {
