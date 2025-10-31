@@ -23,7 +23,7 @@ jobs:
     - name: 'Install DMD'
       run: |
         sudo apt-get update
-        sudo apt-get install -y ldc2
+        sudo apt-get install -y ldc
     - name: 'Build & Test'
       run: |
         dub build --config=default --compiler=ldc2
