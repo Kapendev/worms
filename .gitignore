@@ -16,3 +16,4 @@ test*
 *.odin
 *.py
 *.cpp
+*.lua
