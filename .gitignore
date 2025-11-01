@@ -15,3 +15,4 @@ test*
 *.lst
 *.odin
 *.py
+*.cpp
