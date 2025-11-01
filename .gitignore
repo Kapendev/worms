@@ -18,3 +18,4 @@ test*
 *.cpp
 *.lua
 *.rs
+*.zig
