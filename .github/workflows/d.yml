@@ -31,7 +31,7 @@ jobs:
     - name: 'Build'
       run: |
         git clone https://github.com/Kapendev/parin parin_package
-        ldc2 -J="parin_package\packages\setup\source" -run "parin_package\packages\setup\source\app.d"
+        dmd -J="parin_package\packages\setup\source" -run "parin_package\packages\setup\source\app.d"
         dub build --config=default --verbose
 
   build-macos:
