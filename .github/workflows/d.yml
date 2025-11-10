@@ -36,6 +36,7 @@ jobs:
         git clone https://github.com/Kapendev/parin parin_package
         dmd -J="parin_package\packages\setup\source" -run "parin_package\packages\setup\source\app.d"
         dub build --config=default --verbose
+        .\parin_package\scripts\build.bat
 
   build-macos:
     runs-on: macos-13
