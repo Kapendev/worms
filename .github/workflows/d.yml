@@ -21,7 +21,10 @@ jobs:
     - uses: dlang-community/setup-dlang@4c99aa991ce7d19dd3064de0a4f2f6b2f152e2d7
     - name: 'Build'
       run: |
+        git clone https://github.com/Kapendev/parin parin_package
+        dmd -J="parin_package\packages\setup\source" -run "parin_package\packages\setup\source\app.d"
         dub build --config=default --verbose
+        ./parin_package/scripts/build
 
   build-windows:
     runs-on: windows-latest
